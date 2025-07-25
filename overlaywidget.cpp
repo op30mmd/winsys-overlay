@@ -169,13 +169,15 @@ void OverlayWidget::updateLayout()
     // Clean up existing layout if it exists
     QLayout* oldLayout = layout();
     if (oldLayout) {
-        // Don't try to remove widgets if they don't exist yet
+        // Remove widgets from layout but don't delete them yet
         if (m_cpuWidget) oldLayout->removeWidget(m_cpuWidget);
         if (m_memWidget) oldLayout->removeWidget(m_memWidget);
         if (m_ramWidget) oldLayout->removeWidget(m_ramWidget);
         if (m_diskWidget) oldLayout->removeWidget(m_diskWidget);
         if (m_gpuWidget) oldLayout->removeWidget(m_gpuWidget);
         
+        // Clear the layout from the widget
+        QWidget::setLayout(nullptr);
         delete oldLayout;
     }
 
@@ -197,10 +199,10 @@ void OverlayWidget::updateLayout()
     QString orientation = s.value("appearance/layoutOrientation", "Vertical").toString();
     QBoxLayout* newLayout;
     if (orientation == "Horizontal") {
-        newLayout = new QHBoxLayout(this);
+        newLayout = new QHBoxLayout();
         newLayout->setSpacing(8);
     } else { // Default to Vertical
-        newLayout = new QVBoxLayout(this);
+        newLayout = new QVBoxLayout();
         newLayout->setSpacing(2);
     }
     newLayout->setContentsMargins(5, 2, 5, 2);
@@ -241,6 +243,9 @@ void OverlayWidget::updateLayout()
     newLayout->addWidget(m_ramWidget);
     newLayout->addWidget(m_diskWidget);
     newLayout->addWidget(m_gpuWidget);
+    
+    // Set the new layout on the widget
+    setLayout(newLayout);
 
     // Apply visibility settings
     m_cpuWidget->setVisible(s.value("display/showCpu", true).toBool());
