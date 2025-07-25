@@ -71,7 +71,6 @@ if(WIN32)
             --no-translations
             --no-opengl-sw
             --no-system-d3d-compiler
-            --no-vc-redist
             --dir "$<TARGET_FILE_DIR:winsys-overlay>"
             "$<TARGET_FILE:winsys-overlay>"
         WORKING_DIRECTORY "${QT_BIN_DIR}"
