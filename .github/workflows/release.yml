@@ -56,6 +56,15 @@ jobs:
           cmake --build build --config Release
         shell: cmd
 
+      - name: Reduce Package Size
+        run: |
+          # Remove large, unnecessary files to significantly reduce the package size.
+          # .pdb files are for debugging and not needed in a release.
+          Remove-Item -Path build/Release/*.pdb -ErrorAction SilentlyContinue
+          Remove-Item -Path build/Release/translations -Recurse -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path build/Release/opengl32sw.dll -Force -ErrorAction SilentlyContinue
+        shell: powershell
+
       - name: Package Release Files
         id: package
         run: |
