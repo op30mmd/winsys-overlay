@@ -2,6 +2,7 @@
 #include "settingsdialog.h"
 #include <QLabel>
 #include <QVBoxLayout>
+#include <QHBoxLayout>
 #include <QMouseEvent>
 #include <QContextMenuEvent>
 #include <QGraphicsDropShadowEffect>
@@ -9,6 +10,8 @@
 #include <QApplication>
 #include <QSettings>
 #include <QPainter>
+#include <QStyle>
+#include <QPixmap>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -24,6 +27,7 @@ OverlayWidget::OverlayWidget(QWidget *parent)
     m_monitor = new SysInfoMonitor(this);
 
     setupUi();
+    createIcons();
     loadSettings();
 
     connect(m_monitor, &SysInfoMonitor::statsUpdated, this, &OverlayWidget::updateStats);
@@ -38,6 +42,77 @@ void OverlayWidget::setupUi()
     m_gpuLabel = new QLabel("GPU: ...", this);
 }
 
+void OverlayWidget::createIcons()
+{
+    // Create simple colored icons using Qt's built-in shapes
+    QSettings s;
+    QColor fontColor = s.value("appearance/fontColor", QColor(Qt::white)).value<QColor>();
+    
+    // CPU icon - processor/chip symbol
+    m_cpuIcon = createColoredIcon(":/icons/cpu.svg", fontColor);
+    
+    // Memory icon - RAM bars
+    m_memIcon = createColoredIcon(":/icons/memory.svg", fontColor);
+    
+    // RAM icon - memory module
+    m_ramIcon = createColoredIcon(":/icons/ram.svg", fontColor);
+    
+    // Disk icon - hard drive
+    m_diskIcon = createColoredIcon(":/icons/disk.svg", fontColor);
+    
+    // GPU icon - graphics card
+    m_gpuIcon = createColoredIcon(":/icons/gpu.svg", fontColor);
+}
+
+QPixmap OverlayWidget::createColoredIcon(const QString& iconPath, const QColor& color, const QSize& size)
+{
+    QPixmap pixmap(size);
+    pixmap.fill(Qt::transparent);
+    QPainter painter(&pixmap);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setPen(QPen(color, 1.5));
+    painter.setBrush(Qt::NoBrush);
+
+    // Create simple geometric icons since we don't have SVG files
+    // You can replace these with actual icon files later
+    if (iconPath.contains("cpu")) {
+        // CPU - draw a simple chip
+        painter.drawRect(2, 2, 12, 12);
+        painter.drawRect(4, 4, 8, 8);
+        // Pins
+        painter.drawLine(0, 4, 2, 4);
+        painter.drawLine(0, 8, 2, 8);
+        painter.drawLine(0, 12, 2, 12);
+        painter.drawLine(14, 4, 16, 4);
+        painter.drawLine(14, 8, 16, 8);
+        painter.drawLine(14, 12, 16, 12);
+    } else if (iconPath.contains("memory") || iconPath.contains("ram")) {
+        // Memory - draw RAM bars
+        painter.drawRect(2, 2, 3, 12);
+        painter.drawRect(6, 2, 3, 12);
+        painter.drawRect(11, 2, 3, 12);
+        // Notches
+        painter.drawLine(2, 6, 5, 6);
+        painter.drawLine(6, 6, 9, 6);
+        painter.drawLine(11, 6, 14, 6);
+    } else if (iconPath.contains("disk")) {
+        // Disk - draw a hard drive
+        painter.drawRect(2, 4, 12, 8);
+        painter.drawEllipse(4, 6, 4, 4);
+        painter.drawEllipse(6, 8, 2, 2);
+    } else if (iconPath.contains("gpu")) {
+        // GPU - draw a graphics card
+        painter.drawRect(1, 4, 14, 8);
+        painter.drawRect(3, 6, 10, 4);
+        // Connector
+        painter.drawLine(15, 6, 16, 6);
+        painter.drawLine(15, 8, 16, 8);
+        painter.drawLine(15, 10, 16, 10);
+    }
+
+    return pixmap;
+}
+
 void OverlayWidget::loadSettings()
 {
     QSettings s;
@@ -45,10 +120,13 @@ void OverlayWidget::loadSettings()
     // Restore position
     move(s.value("window/pos", QPoint(100, 100)).toPoint());
 
+    // Recreate icons with current color
+    createIcons();
+
     // Apply appearance settings to labels
     int fontSize = s.value("appearance/fontSize", 11).toInt();
     QColor fontColor = s.value("appearance/fontColor", QColor(Qt::white)).value<QColor>();
-    QString labelStyle = QString("QLabel { color: %1; font-size: %2px; font-weight: bold; }")
+    QString labelStyle = QString("QLabel { color: %1; font-size: %2px; font-weight: bold; padding-left: 20px; }")
                              .arg(fontColor.name(QColor::HexRgb), QString::number(fontSize));
 
     for (auto* label : findChildren<QLabel*>()) {
@@ -60,6 +138,13 @@ void OverlayWidget::loadSettings()
         effect->setOffset(0, 0);
         label->setGraphicsEffect(effect);
     }
+
+    // Set icons for labels
+    m_cpuLabel->setPixmap(m_cpuIcon);
+    m_memLabel->setPixmap(m_memIcon);
+    m_ramLabel->setPixmap(m_ramIcon);
+    m_diskLabel->setPixmap(m_diskIcon);
+    m_gpuLabel->setPixmap(m_gpuIcon);
 
     // Delete existing layout to prepare for a new one.
     // This is safe, as widgets are reparented to this widget.
@@ -174,10 +259,18 @@ void OverlayWidget::paintEvent(QPaintEvent *event)
 void OverlayWidget::contextMenuEvent(QContextMenuEvent *event)
 {
     QMenu contextMenu(this);
-    contextMenu.addAction("Settings...", this, &OverlayWidget::openSettingsDialog);
+    
+    // Add icons to context menu
+    QAction *settingsAction = contextMenu.addAction("Settings...");
+    settingsAction->setIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
+    connect(settingsAction, &QAction::triggered, this, &OverlayWidget::openSettingsDialog);
+    
     contextMenu.addSeparator();
+    
     QAction *closeAction = contextMenu.addAction("Close");
+    closeAction->setIcon(style()->standardIcon(QStyle::SP_DialogCloseButton));
     connect(closeAction, &QAction::triggered, qApp, &QApplication::quit);
+    
     contextMenu.exec(event->globalPos());
 }
 

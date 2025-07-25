@@ -34,6 +34,8 @@ private slots:
 private:
     void loadSettings();
     void setupUi();
+    void createIcons();
+    QPixmap createColoredIcon(const QString& iconPath, const QColor& color, const QSize& size = QSize(16, 16));
 
     QLabel *m_cpuLabel;
     QLabel *m_memLabel;
@@ -42,5 +44,12 @@ private:
     QLabel *m_gpuLabel;
     SysInfoMonitor *m_monitor;
     QPoint m_dragPosition;
+    
+    // Icon pixmaps
+    QPixmap m_cpuIcon;
+    QPixmap m_memIcon;
+    QPixmap m_ramIcon;
+    QPixmap m_diskIcon;
+    QPixmap m_gpuIcon;
 };
 #endif // OVERLAYWIDGET_H
