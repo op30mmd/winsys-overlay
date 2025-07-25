@@ -42,8 +42,15 @@ if(WIN32)
 
     # Add a post-build step to run windeployqt on the executable
     add_custom_command(TARGET winsys-overlay POST_BUILD
-        COMMAND ${WINDEPLOYQT_EXECUTABLE}
-        ARGS --dir "$<TARGET_FILE_DIR:winsys-overlay>" "$<TARGET_FILE:winsys-overlay>"
+        COMMAND ${Qt6_windeployqt_EXECUTABLE}
+        ARGS
+            --release
+            --no-translations
+            --no-opengl-sw
+            --no-system-d3d-compiler
+            --no-vc-redist
+            --dir "$<TARGET_FILE_DIR:winsys-overlay>"
+            "$<TARGET_FILE:winsys-overlay>"
         COMMENT "Running windeployqt on $<TARGET_FILE_NAME:winsys-overlay>..."
         VERBATIM
     )
