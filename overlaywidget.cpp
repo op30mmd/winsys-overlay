@@ -167,15 +167,16 @@ void OverlayWidget::updateLayout()
     QSettings s;
     
     // Clean up existing layout if it exists
-    if (layout()) {
-        // Remove widgets from layout but don't delete them yet
-        if (m_cpuWidget) layout()->removeWidget(m_cpuWidget);
-        if (m_memWidget) layout()->removeWidget(m_memWidget);
-        if (m_ramWidget) layout()->removeWidget(m_ramWidget);
-        if (m_diskWidget) layout()->removeWidget(m_diskWidget);
-        if (m_gpuWidget) layout()->removeWidget(m_gpuWidget);
+    QLayout* oldLayout = layout();
+    if (oldLayout) {
+        // Don't try to remove widgets if they don't exist yet
+        if (m_cpuWidget) oldLayout->removeWidget(m_cpuWidget);
+        if (m_memWidget) oldLayout->removeWidget(m_memWidget);
+        if (m_ramWidget) oldLayout->removeWidget(m_ramWidget);
+        if (m_diskWidget) oldLayout->removeWidget(m_diskWidget);
+        if (m_gpuWidget) oldLayout->removeWidget(m_gpuWidget);
         
-        delete layout();
+        delete oldLayout;
     }
 
     // Delete existing container widgets
@@ -185,14 +186,21 @@ void OverlayWidget::updateLayout()
     delete m_diskWidget;
     delete m_gpuWidget;
 
+    // Reset pointers
+    m_cpuWidget = nullptr;
+    m_memWidget = nullptr;
+    m_ramWidget = nullptr;  
+    m_diskWidget = nullptr;
+    m_gpuWidget = nullptr;
+
     // Apply new layout based on settings
     QString orientation = s.value("appearance/layoutOrientation", "Vertical").toString();
     QBoxLayout* newLayout;
     if (orientation == "Horizontal") {
-        newLayout = new QHBoxLayout();
+        newLayout = new QHBoxLayout(this);
         newLayout->setSpacing(8);
     } else { // Default to Vertical
-        newLayout = new QVBoxLayout();
+        newLayout = new QVBoxLayout(this);
         newLayout->setSpacing(2);
     }
     newLayout->setContentsMargins(5, 2, 5, 2);
@@ -233,8 +241,6 @@ void OverlayWidget::updateLayout()
     newLayout->addWidget(m_ramWidget);
     newLayout->addWidget(m_diskWidget);
     newLayout->addWidget(m_gpuWidget);
-    
-    setLayout(newLayout);
 
     // Apply visibility settings
     m_cpuWidget->setVisible(s.value("display/showCpu", true).toBool());
