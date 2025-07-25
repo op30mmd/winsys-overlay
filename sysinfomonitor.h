@@ -27,6 +27,8 @@ public:
     explicit SysInfoMonitor(QObject *parent = nullptr);
     ~SysInfoMonitor();
     void setUpdateInterval(int msec);
+    void stopUpdates();
+    void resumeUpdates();
 
 signals:
     void statsUpdated(const SysInfo& info);

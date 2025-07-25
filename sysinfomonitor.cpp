@@ -73,6 +73,16 @@ void SysInfoMonitor::setUpdateInterval(int msec)
     }
 }
 
+void SysInfoMonitor::stopUpdates()
+{
+    m_timer->stop();
+}
+
+void SysInfoMonitor::resumeUpdates()
+{
+    m_timer->start(); // Will use the existing interval
+}
+
 SysInfoMonitor::~SysInfoMonitor()
 {
     if (m_cpuQuery) {

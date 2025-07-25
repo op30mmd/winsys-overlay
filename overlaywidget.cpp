@@ -106,9 +106,13 @@ void OverlayWidget::applySettings()
 
 void OverlayWidget::openSettingsDialog()
 {
+    m_monitor->stopUpdates(); // Stop updates to prevent interference with the dialog
+
     SettingsDialog dialog(this);
     connect(&dialog, &SettingsDialog::settingsApplied, this, &OverlayWidget::applySettings);
     dialog.exec();
+
+    m_monitor->resumeUpdates(); // Resume updates after the dialog is closed
 }
 
 OverlayWidget::~OverlayWidget()
