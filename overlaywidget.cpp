@@ -3,6 +3,10 @@
 #include <QVBoxLayout>
 #include <QMouseEvent>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 OverlayWidget::OverlayWidget(QWidget *parent)
     : QWidget(parent)
 {
@@ -38,6 +42,16 @@ void OverlayWidget::updateStats(const SysInfo &info)
 {
     m_cpuLabel->setText(QString("CPU: %1%").arg(info.cpuLoad, 0, 'f', 1));
     m_memLabel->setText(QString("MEM: %1%").arg(info.memUsage));
+
+#ifdef Q_OS_WIN
+    // Periodically re-apply the HWND_TOPMOST flag. This is a workaround to keep the widget
+    // on top of other topmost windows like the Start Menu or Task Manager. When another
+    // topmost window appears, it can cover our widget. This call brings our widget
+    // back to the top of the Z-order for all topmost windows without activating it.
+    if (auto hwnd = reinterpret_cast<HWND>(winId())) {
+        SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
+#endif
 }
 
 void OverlayWidget::mousePressEvent(QMouseEvent *event)
