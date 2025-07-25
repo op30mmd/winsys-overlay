@@ -11,6 +11,16 @@ set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
+# Enable Link-Time Optimization (LTO) if supported.
+# This allows for better optimization across the entire project,
+# resulting in a smaller and potentially faster executable.
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported)
+if(ipo_supported)
+  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
+  message(STATUS "IPO/LTO enabled.")
+endif()
+
 add_executable(winsys-overlay WIN32
     main.cpp
     overlaywidget.h
