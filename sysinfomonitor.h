@@ -8,6 +8,7 @@
 #ifdef Q_OS_WIN
 #include <windows.h>
 #include <Pdh.h>
+#include <PdhMsg.h>
 #endif
 
 struct SysInfo {
