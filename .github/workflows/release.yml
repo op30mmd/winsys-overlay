@@ -20,6 +20,9 @@ env:
   # Path to the Visual Studio Developer Command Prompt initialization script.
   # This is the standard way to set up the MSVC compiler environment.
   VCVARS_PATH: "C:\\Program Files\\Microsoft Visual Studio\\2022\\Community\\VC\\Auxiliary\\Build\\vcvars64.bat"
+  #
+  # (Optional) Path to the UPX executable. Download from https://upx.github.io/
+  UPX_PATH: "C:\\upx\\upx.exe"
 
 jobs:
   build-and-release:
@@ -73,6 +76,14 @@ jobs:
           Remove-Item -Path build/Release/Qt6WebEngine*.dll -ErrorAction SilentlyContinue
           Remove-Item -Path build/Release/QtWebEngineProcess.exe -ErrorAction SilentlyContinue
         shell: powershell
+
+      - name: Compress Executables with UPX
+        if: env.UPX_PATH != '' && steps.package.outputs.error == ''
+        run: |
+          echo "Compressing executables with UPX..."
+          "%UPX_PATH%" --best --lzma build/Release/*.exe
+          "%UPX_PATH%" --best --lzma build/Release/*.dll
+        shell: cmd
 
       - name: Package Release Files
         id: package
