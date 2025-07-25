@@ -9,7 +9,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Svg)
 
 # Enable Link-Time Optimization (LTO) if supported.
 # This allows for better optimization across the entire project,
@@ -32,7 +32,7 @@ add_executable(winsys-overlay WIN32
 )
 
 # Link against the Performance Data Helper library on Windows
-target_link_libraries(winsys-overlay PRIVATE Qt6::Widgets pdh)
+target_link_libraries(winsys-overlay PRIVATE Qt6::Widgets Qt6::Svg pdh)
 
 if(WIN32)
     include(GNUInstallDirs)
@@ -52,6 +52,5 @@ if(WIN32)
             --dir "$<TARGET_FILE_DIR:winsys-overlay>"
             "$<TARGET_FILE:winsys-overlay>"
         COMMENT "Running windeployqt on $<TARGET_FILE_NAME:winsys-overlay>..."
-        VERBATIM
     )
 endif()
