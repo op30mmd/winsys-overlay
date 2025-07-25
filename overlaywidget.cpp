@@ -37,9 +37,10 @@ OverlayWidget::OverlayWidget(QWidget *parent)
     // Add a shadow effect to all labels to improve readability on any background
     for (auto* label : findChildren<QLabel*>()) {
         auto* effect = new QGraphicsDropShadowEffect();
-        effect->setBlurRadius(5);
-        effect->setColor(QColor(0, 0, 0, 180)); // Black shadow with some transparency
-        effect->setOffset(1, 1);
+        // A centered, blurred, dark shadow creates a "glow" effect that acts as a soft outline
+        effect->setBlurRadius(8);
+        effect->setColor(QColor(0, 0, 0, 220));
+        effect->setOffset(0, 0);
         label->setGraphicsEffect(effect);
     }
 
