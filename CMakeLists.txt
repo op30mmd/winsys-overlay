@@ -17,6 +17,8 @@ add_executable(winsys-overlay WIN32
     overlaywidget.cpp
     sysinfomonitor.h
     sysinfomonitor.cpp
+    settingsdialog.h
+    settingsdialog.cpp
 )
 
 # Link against the Performance Data Helper library on Windows

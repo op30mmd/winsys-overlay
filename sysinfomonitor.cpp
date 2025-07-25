@@ -66,6 +66,13 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
     updateStats();
 }
 
+void SysInfoMonitor::setUpdateInterval(int msec)
+{
+    if (m_timer->interval() != msec) {
+        m_timer->start(msec);
+    }
+}
+
 SysInfoMonitor::~SysInfoMonitor()
 {
     if (m_cpuQuery) {

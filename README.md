@@ -17,10 +17,19 @@ A simple, lightweight, always-on-top system resource monitor for Windows, built 
 *   **Draggable**: Simply click and drag the overlay to position it anywhere on your screen.
 *   **High Readability**: Text includes a subtle drop shadow, ensuring it's easy to read against any background, light or dark.
 
+*   **Highly Customizable**: Right-click to open the settings panel and configure:
+    *   Font size and color
+    *   Background color and opacity
+    *   Which metrics are displayed
+    *   Data refresh interval
+*   **Persistent**: Saves your settings and last known position automatically.
+
 ## Usage
 
 *   **Move**: Click and drag with the left mouse button to move the overlay.
-*   **Close**: Right-click the overlay and select "Close" to exit the application.
+*   **Options**: Right-click the overlay to open a context menu.
+    *   **Settings**: Opens a dialog to customize the overlay's appearance and behavior.
+    *   **Close**: Exits the application.
 
 ---
 

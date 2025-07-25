@@ -6,6 +6,8 @@
 #include "sysinfomonitor.h"
 
 class QLabel;
+class QMouseEvent;
+class QContextMenuEvent;
 
 class OverlayWidget : public QWidget
 {
@@ -21,9 +23,18 @@ public slots:
 protected:
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
+    void mouseReleaseEvent(QMouseEvent *event) override;
+    void paintEvent(QPaintEvent *event) override;
     void contextMenuEvent(QContextMenuEvent *event) override;
 
+private slots:
+    void openSettingsDialog();
+    void applySettings();
+
 private:
+    void loadSettings();
+    void setupUi();
+
     QLabel *m_cpuLabel;
     QLabel *m_memLabel;
     QLabel *m_ramLabel;

@@ -1,4 +1,5 @@
 #include "overlaywidget.h"
+#include "settingsdialog.h"
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QMouseEvent>
@@ -6,6 +7,8 @@
 #include <QGraphicsDropShadowEffect>
 #include <QMenu>
 #include <QApplication>
+#include <QSettings>
+#include <QPainter>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -20,29 +23,19 @@ OverlayWidget::OverlayWidget(QWidget *parent)
 
     m_monitor = new SysInfoMonitor(this);
 
+    setupUi();
+    loadSettings();
+
+    connect(m_monitor, &SysInfoMonitor::statsUpdated, this, &OverlayWidget::updateStats);
+}
+
+void OverlayWidget::setupUi()
+{
     m_cpuLabel = new QLabel("CPU: ...", this);
     m_memLabel = new QLabel("MEM: ...", this);
     m_ramLabel = new QLabel("RAM: ...", this);
     m_diskLabel = new QLabel("DSK: ...", this);
     m_gpuLabel = new QLabel("GPU: ...", this);
-
-    // Style the labels for better visibility on any background
-    const QString labelStyle = "QLabel { color: white; font-size: 11px; font-weight: bold; }";
-    m_cpuLabel->setStyleSheet(labelStyle);
-    m_memLabel->setStyleSheet(labelStyle);
-    m_ramLabel->setStyleSheet(labelStyle);
-    m_diskLabel->setStyleSheet(labelStyle);
-    m_gpuLabel->setStyleSheet(labelStyle);
-
-    // Add a shadow effect to all labels to improve readability on any background
-    for (auto* label : findChildren<QLabel*>()) {
-        auto* effect = new QGraphicsDropShadowEffect();
-        // A centered, blurred, dark shadow creates a "glow" effect that acts as a soft outline
-        effect->setBlurRadius(8);
-        effect->setColor(QColor(0, 0, 0, 220));
-        effect->setOffset(0, 0);
-        label->setGraphicsEffect(effect);
-    }
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(5, 2, 5, 2);
@@ -53,11 +46,55 @@ OverlayWidget::OverlayWidget(QWidget *parent)
     layout->addWidget(m_diskLabel);
     layout->addWidget(m_gpuLabel);
     setLayout(layout);
+}
 
-    connect(m_monitor, &SysInfoMonitor::statsUpdated, this, &OverlayWidget::updateStats);
+void OverlayWidget::loadSettings()
+{
+    QSettings s;
 
-    // Adjust size to be more compact
-    resize(120, 85);
+    // Restore position
+    move(s.value("window/pos", QPoint(100, 100)).toPoint());
+
+    // Appearance
+    int fontSize = s.value("appearance/fontSize", 11).toInt();
+    QColor fontColor = s.value("appearance/fontColor", Qt::white).value<QColor>();
+    QString labelStyle = QString("QLabel { color: %1; font-size: %2px; font-weight: bold; }")
+                             .arg(fontColor.name(QColor::HexRgb), QString::number(fontSize));
+
+    for (auto* label : findChildren<QLabel*>()) {
+        label->setStyleSheet(labelStyle);
+
+        auto* effect = new QGraphicsDropShadowEffect();
+        effect->setBlurRadius(8);
+        effect->setColor(QColor(0, 0, 0, 220));
+        effect->setOffset(0, 0);
+        label->setGraphicsEffect(effect);
+    }
+
+    // Visibility
+    m_cpuLabel->setVisible(s.value("display/showCpu", true).toBool());
+    m_memLabel->setVisible(s.value("display/showMem", true).toBool());
+    m_ramLabel->setVisible(s.value("display/showRam", true).toBool());
+    m_diskLabel->setVisible(s.value("display/showDisk", true).toBool());
+    m_gpuLabel->setVisible(s.value("display/showGpu", true).toBool());
+
+    // Behavior
+    m_monitor->setUpdateInterval(s.value("behavior/updateInterval", 1000).toInt());
+
+    adjustSize();
+    update(); // Trigger a repaint
+}
+
+void OverlayWidget::applySettings()
+{
+    loadSettings();
+}
+
+void OverlayWidget::openSettingsDialog()
+{
+    SettingsDialog dialog(this);
+    connect(&dialog, &SettingsDialog::settingsApplied, this, &OverlayWidget::applySettings);
+    dialog.exec();
 }
 
 OverlayWidget::~OverlayWidget()
@@ -91,9 +128,36 @@ void OverlayWidget::mousePressEvent(QMouseEvent *event)
     }
 }
 
+void OverlayWidget::mouseReleaseEvent(QMouseEvent *event)
+{
+    // Save window position when done dragging
+    if (event->button() == Qt::LeftButton) {
+        QSettings s;
+        s.setValue("window/pos", pos());
+    }
+    QWidget::mouseReleaseEvent(event);
+}
+
+void OverlayWidget::paintEvent(QPaintEvent *event)
+{
+    Q_UNUSED(event);
+    QSettings s;
+    QColor bgColor = s.value("appearance/backgroundColor", Qt::black).value<QColor>();
+    int opacity = s.value("appearance/backgroundOpacity", 120).toInt();
+    bgColor.setAlpha(opacity);
+
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+    painter.setBrush(bgColor);
+    painter.setPen(Qt::NoPen);
+    painter.drawRoundedRect(rect(), 5.0, 5.0);
+}
+
 void OverlayWidget::contextMenuEvent(QContextMenuEvent *event)
 {
     QMenu contextMenu(this);
+    contextMenu.addAction("Settings...", this, &OverlayWidget::openSettingsDialog);
+    contextMenu.addSeparator();
     QAction *closeAction = contextMenu.addAction("Close");
     connect(closeAction, &QAction::triggered, qApp, &QApplication::quit);
     contextMenu.exec(event->globalPos());
