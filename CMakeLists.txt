@@ -19,8 +19,14 @@ endif()
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
+# Check if the windeployqt tool was found before trying to use it.
+if(NOT DEFINED Qt6_windeployqt_EXECUTABLE)
+    message(FATAL_ERROR "Failed to find windeployqt.exe. Ensure your Qt installation is correct and the Widgets component includes deployment tools.")
+endif()
+
 # Get the directory containing the Qt binaries. This is crucial for the post-build step.
-get_filename_component(QT_BIN_DIR ${Qt6_windeployqt_EXECUTABLE} DIRECTORY)
+# Quoting the variable handles paths with spaces and prevents CMake from misinterpreting it.
+get_filename_component(QT_BIN_DIR "${Qt6_windeployqt_EXECUTABLE}" DIRECTORY)
 
 add_executable(winsys-overlay WIN32
     main.cpp
