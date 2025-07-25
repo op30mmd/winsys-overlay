@@ -26,6 +26,10 @@ jobs:
     # This job runs on a self-hosted runner, as requested.
     # Ensure your runner has a label 'self-hosted'.
     runs-on: self-hosted
+    permissions:
+      # This permission is required for the softprops/action-gh-release action
+      # to create a GitHub Release and upload assets.
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -59,10 +63,15 @@ jobs:
       - name: Reduce Package Size
         run: |
           # Remove large, unnecessary files to significantly reduce the package size.
-          # .pdb files are for debugging and not needed in a release.
+          # - .pdb files are for debugging.
+          # - translations, qml, quick, and webengine are for features not used in this app.
           Remove-Item -Path build/Release/*.pdb -ErrorAction SilentlyContinue
           Remove-Item -Path build/Release/translations -Recurse -Force -ErrorAction SilentlyContinue
           Remove-Item -Path build/Release/opengl32sw.dll -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path build/Release/Qt6Qml*.dll -ErrorAction SilentlyContinue
+          Remove-Item -Path build/Release/Qt6Quick*.dll -ErrorAction SilentlyContinue
+          Remove-Item -Path build/Release/Qt6WebEngine*.dll -ErrorAction SilentlyContinue
+          Remove-Item -Path build/Release/QtWebEngineProcess.exe -ErrorAction SilentlyContinue
         shell: powershell
 
       - name: Package Release Files
