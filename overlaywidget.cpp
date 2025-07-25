@@ -2,6 +2,7 @@
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QMouseEvent>
+#include <QGraphicsDropShadowEffect>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -29,6 +30,15 @@ OverlayWidget::OverlayWidget(QWidget *parent)
     m_ramLabel->setStyleSheet(labelStyle);
     m_diskLabel->setStyleSheet(labelStyle);
     m_gpuLabel->setStyleSheet(labelStyle);
+
+    // Add a shadow effect to all labels to improve readability on any background
+    for (auto* label : findChildren<QLabel*>()) {
+        auto* effect = new QGraphicsDropShadowEffect();
+        effect->setBlurRadius(5);
+        effect->setColor(QColor(0, 0, 0, 180)); // Black shadow with some transparency
+        effect->setOffset(1, 1);
+        label->setGraphicsEffect(effect);
+    }
 
     QVBoxLayout *layout = new QVBoxLayout(this);
     layout->setContentsMargins(5, 2, 5, 2);
