@@ -57,7 +57,7 @@ void OverlayWidget::loadSettings()
 
     // Appearance
     int fontSize = s.value("appearance/fontSize", 11).toInt();
-    QColor fontColor = s.value("appearance/fontColor", Qt::white).value<QColor>();
+    QColor fontColor = s.value("appearance/fontColor", QColor(Qt::white)).value<QColor>();
     QString labelStyle = QString("QLabel { color: %1; font-size: %2px; font-weight: bold; }")
                              .arg(fontColor.name(QColor::HexRgb), QString::number(fontSize));
 
@@ -142,7 +142,7 @@ void OverlayWidget::paintEvent(QPaintEvent *event)
 {
     Q_UNUSED(event);
     QSettings s;
-    QColor bgColor = s.value("appearance/backgroundColor", Qt::black).value<QColor>();
+    QColor bgColor = s.value("appearance/backgroundColor", QColor(Qt::black)).value<QColor>();
     int opacity = s.value("appearance/backgroundOpacity", 120).toInt();
     bgColor.setAlpha(opacity);
 

@@ -108,13 +108,13 @@ void SettingsDialog::saveAndApplySettings()
 void SettingsDialog::chooseFontColor()
 {
     QSettings s;
-    QColor color = QColorDialog::getColor(s.value("appearance/fontColor", Qt::white).value<QColor>(), this, "Choose Font Color");
+    QColor color = QColorDialog::getColor(s.value("appearance/fontColor", QColor(Qt::white)).value<QColor>(), this, "Choose Font Color");
     if (color.isValid()) s.setValue("appearance/fontColor", color);
 }
 
 void SettingsDialog::chooseBackgroundColor()
 {
     QSettings s;
-    QColor color = QColorDialog::getColor(s.value("appearance/backgroundColor", Qt::black).value<QColor>(), this, "Choose Background Color");
+    QColor color = QColorDialog::getColor(s.value("appearance/backgroundColor", QColor(Qt::black)).value<QColor>(), this, "Choose Background Color");
     if (color.isValid()) s.setValue("appearance/backgroundColor", color);
 }
