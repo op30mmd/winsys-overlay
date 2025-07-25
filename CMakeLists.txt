@@ -39,20 +39,18 @@ if(WIN32)
     )
 
     # Add a post-build step to run windeployqt with optimizations.
-    # This command now correctly calls the executable and passes all the
-    # necessary arguments to reduce the final deployment size.
+    # This version explicitly uses the ARGS keyword to ensure that MSBuild
+    # correctly associates the arguments with the command executable.
     add_custom_command(TARGET winsys-overlay POST_BUILD
-        # Use the correct variable provided by Qt for the windeployqt executable
         COMMAND ${Qt6_windeployqt_EXECUTABLE}
-        # Add arguments to reduce deployment size
-        --release
-        --no-translations
-        --no-opengl-sw
-        --no-system-d3d-compiler
-        --no-vc-redist
-        # Specify output directory and the executable to deploy
-        --dir "$<TARGET_FILE_DIR:winsys-overlay>"
-        "$<TARGET_FILE:winsys-overlay>"
+        ARGS
+            --release
+            --no-translations
+            --no-opengl-sw
+            --no-system-d3d-compiler
+            --no-vc-redist
+            --dir "$<TARGET_FILE_DIR:winsys-overlay>"
+            "$<TARGET_FILE:winsys-overlay>"
         COMMENT "Running optimized windeployqt on $<TARGET_FILE_NAME:winsys-overlay>..."
         VERBATIM
     )
