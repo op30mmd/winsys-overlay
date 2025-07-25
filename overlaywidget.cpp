@@ -28,6 +28,7 @@ OverlayWidget::OverlayWidget(QWidget *parent)
 
     setupUi();
     createIcons();
+    createLayout();
     loadSettings();
 
     connect(m_monitor, &SysInfoMonitor::statsUpdated, this, &OverlayWidget::updateStats);
@@ -120,92 +121,21 @@ QPixmap OverlayWidget::createColoredIcon(const QString& iconPath, const QColor& 
     return pixmap;
 }
 
-void OverlayWidget::loadSettings()
+void OverlayWidget::createLayout()
 {
+    // Create the layout and container widgets ONCE
     QSettings s;
-
-    // Restore position
-    move(s.value("window/pos", QPoint(100, 100)).toPoint());
-
-    // Recreate icons with current color
-    createIcons();
-
-    // Apply appearance settings to labels - but don't apply to icon labels
-    int fontSize = s.value("appearance/fontSize", 11).toInt();
-    QColor fontColor = s.value("appearance/fontColor", QColor(Qt::white)).value<QColor>();
-    QString labelStyle = QString("QLabel { color: %1; font-size: %2px; font-weight: bold; }")
-                             .arg(fontColor.name(QColor::HexRgb), QString::number(fontSize));
-
-    // Apply styles only to text labels, not icon labels
-    m_cpuLabel->setStyleSheet(labelStyle);
-    m_memLabel->setStyleSheet(labelStyle);
-    m_ramLabel->setStyleSheet(labelStyle);
-    m_diskLabel->setStyleSheet(labelStyle);
-    m_gpuLabel->setStyleSheet(labelStyle);
-
-    // Apply shadow effects only to text labels
-    for (auto* label : {m_cpuLabel, m_memLabel, m_ramLabel, m_diskLabel, m_gpuLabel}) {
-        auto* effect = new QGraphicsDropShadowEffect();
-        effect->setBlurRadius(8);
-        effect->setColor(QColor(0, 0, 0, 220));
-        effect->setOffset(0, 0);
-        label->setGraphicsEffect(effect);
-    }
-
-    // Update the layout
-    updateLayout();
-
-    // Behavior
-    m_monitor->setUpdateInterval(s.value("behavior/updateInterval", 1000).toInt());
-
-    adjustSize();
-    update(); // Trigger a repaint
-}
-
-void OverlayWidget::updateLayout()
-{
-    QSettings s;
-    
-    // Clean up existing layout if it exists
-    QLayout* oldLayout = layout();
-    if (oldLayout) {
-        // Remove widgets from layout but don't delete them yet
-        if (m_cpuWidget) oldLayout->removeWidget(m_cpuWidget);
-        if (m_memWidget) oldLayout->removeWidget(m_memWidget);
-        if (m_ramWidget) oldLayout->removeWidget(m_ramWidget);
-        if (m_diskWidget) oldLayout->removeWidget(m_diskWidget);
-        if (m_gpuWidget) oldLayout->removeWidget(m_gpuWidget);
-        
-        // Clear the layout from the widget
-        QWidget::setLayout(nullptr);
-        delete oldLayout;
-    }
-
-    // Delete existing container widgets
-    delete m_cpuWidget;
-    delete m_memWidget;
-    delete m_ramWidget;  
-    delete m_diskWidget;
-    delete m_gpuWidget;
-
-    // Reset pointers
-    m_cpuWidget = nullptr;
-    m_memWidget = nullptr;
-    m_ramWidget = nullptr;  
-    m_diskWidget = nullptr;
-    m_gpuWidget = nullptr;
-
-    // Apply new layout based on settings
     QString orientation = s.value("appearance/layoutOrientation", "Vertical").toString();
-    QBoxLayout* newLayout;
+    
+    QBoxLayout* mainLayout;
     if (orientation == "Horizontal") {
-        newLayout = new QHBoxLayout();
-        newLayout->setSpacing(8);
+        mainLayout = new QHBoxLayout(this);
+        mainLayout->setSpacing(8);
     } else { // Default to Vertical
-        newLayout = new QVBoxLayout();
-        newLayout->setSpacing(2);
+        mainLayout = new QVBoxLayout(this);
+        mainLayout->setSpacing(2);
     }
-    newLayout->setContentsMargins(5, 2, 5, 2);
+    mainLayout->setContentsMargins(5, 2, 5, 2);
 
     // Create horizontal layouts for each metric with icon + text
     auto createMetricLayout = [this, orientation](QLabel* label, const QPixmap& icon) -> QWidget* {
@@ -236,23 +166,119 @@ void OverlayWidget::updateLayout()
     m_ramWidget = createMetricLayout(m_ramLabel, m_ramIcon);
     m_diskWidget = createMetricLayout(m_diskLabel, m_diskIcon);
     m_gpuWidget = createMetricLayout(m_gpuLabel, m_gpuIcon);
+    
+    // Store references to icon labels for later updates
+    m_cpuIconLabel = m_cpuWidget->findChild<QLabel*>();
+    m_memIconLabel = m_memWidget->findChild<QLabel*>();
+    m_ramIconLabel = m_ramWidget->findChild<QLabel*>();
+    m_diskIconLabel = m_diskWidget->findChild<QLabel*>();
+    m_gpuIconLabel = m_gpuWidget->findChild<QLabel*>();
 
     // Add widgets to layout
+    mainLayout->addWidget(m_cpuWidget);
+    mainLayout->addWidget(m_memWidget);
+    mainLayout->addWidget(m_ramWidget);
+    mainLayout->addWidget(m_diskWidget);
+    mainLayout->addWidget(m_gpuWidget);
+}
+
+void OverlayWidget::loadSettings()
+{
+    QSettings s;
+
+    // Restore position
+    move(s.value("window/pos", QPoint(100, 100)).toPoint());
+
+    // Recreate icons with current color
+    createIcons();
+    
+    // Update icon labels with new icons
+    if (m_cpuIconLabel) m_cpuIconLabel->setPixmap(m_cpuIcon);
+    if (m_memIconLabel) m_memIconLabel->setPixmap(m_memIcon);
+    if (m_ramIconLabel) m_ramIconLabel->setPixmap(m_ramIcon);
+    if (m_diskIconLabel) m_diskIconLabel->setPixmap(m_diskIcon);
+    if (m_gpuIconLabel) m_gpuIconLabel->setPixmap(m_gpuIcon);
+
+    // Apply appearance settings to labels
+    int fontSize = s.value("appearance/fontSize", 11).toInt();
+    QColor fontColor = s.value("appearance/fontColor", QColor(Qt::white)).value<QColor>();
+    QString labelStyle = QString("QLabel { color: %1; font-size: %2px; font-weight: bold; }")
+                             .arg(fontColor.name(QColor::HexRgb), QString::number(fontSize));
+
+    // Apply styles only to text labels, not icon labels
+    m_cpuLabel->setStyleSheet(labelStyle);
+    m_memLabel->setStyleSheet(labelStyle);
+    m_ramLabel->setStyleSheet(labelStyle);
+    m_diskLabel->setStyleSheet(labelStyle);
+    m_gpuLabel->setStyleSheet(labelStyle);
+
+    // Apply shadow effects only to text labels
+    for (auto* label : {m_cpuLabel, m_memLabel, m_ramLabel, m_diskLabel, m_gpuLabel}) {
+        auto* effect = new QGraphicsDropShadowEffect();
+        effect->setBlurRadius(8);
+        effect->setColor(QColor(0, 0, 0, 220));
+        effect->setOffset(0, 0);
+        label->setGraphicsEffect(effect);
+    }
+
+    // Apply visibility settings
+    if (m_cpuWidget) m_cpuWidget->setVisible(s.value("display/showCpu", true).toBool());
+    if (m_memWidget) m_memWidget->setVisible(s.value("display/showMem", true).toBool());
+    if (m_ramWidget) m_ramWidget->setVisible(s.value("display/showRam", true).toBool());
+    if (m_diskWidget) m_diskWidget->setVisible(s.value("display/showDisk", true).toBool());
+    if (m_gpuWidget) m_gpuWidget->setVisible(s.value("display/showGpu", true).toBool());
+
+    // Check if layout orientation has changed
+    QString currentOrientation = s.value("appearance/layoutOrientation", "Vertical").toString();
+    QBoxLayout* currentLayout = qobject_cast<QBoxLayout*>(layout());
+    bool isHorizontal = qobject_cast<QHBoxLayout*>(currentLayout) != nullptr;
+    bool shouldBeHorizontal = (currentOrientation == "Horizontal");
+    
+    if (isHorizontal != shouldBeHorizontal) {
+        // Layout orientation changed, need to recreate
+        updateLayoutOrientation();
+    }
+
+    // Behavior
+    m_monitor->setUpdateInterval(s.value("behavior/updateInterval", 1000).toInt());
+
+    adjustSize();
+    update(); // Trigger a repaint
+}
+
+void OverlayWidget::updateLayoutOrientation()
+{
+    // Only recreate layout if orientation actually changed
+    QSettings s;
+    QString orientation = s.value("appearance/layoutOrientation", "Vertical").toString();
+    
+    // Remove widgets from current layout
+    if (layout()) {
+        layout()->removeWidget(m_cpuWidget);
+        layout()->removeWidget(m_memWidget);
+        layout()->removeWidget(m_ramWidget);
+        layout()->removeWidget(m_diskWidget);
+        layout()->removeWidget(m_gpuWidget);
+        delete layout();
+    }
+    
+    // Create new layout with correct orientation
+    QBoxLayout* newLayout;
+    if (orientation == "Horizontal") {
+        newLayout = new QHBoxLayout(this);
+        newLayout->setSpacing(8);
+    } else { // Default to Vertical
+        newLayout = new QVBoxLayout(this);
+        newLayout->setSpacing(2);
+    }
+    newLayout->setContentsMargins(5, 2, 5, 2);
+
+    // Add widgets back to new layout
     newLayout->addWidget(m_cpuWidget);
     newLayout->addWidget(m_memWidget);
     newLayout->addWidget(m_ramWidget);
     newLayout->addWidget(m_diskWidget);
     newLayout->addWidget(m_gpuWidget);
-    
-    // Set the new layout on the widget
-    setLayout(newLayout);
-
-    // Apply visibility settings
-    m_cpuWidget->setVisible(s.value("display/showCpu", true).toBool());
-    m_memWidget->setVisible(s.value("display/showMem", true).toBool());
-    m_ramWidget->setVisible(s.value("display/showRam", true).toBool());
-    m_diskWidget->setVisible(s.value("display/showDisk", true).toBool());
-    m_gpuWidget->setVisible(s.value("display/showGpu", true).toBool());
 }
 
 void OverlayWidget::applySettings()

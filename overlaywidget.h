@@ -35,7 +35,8 @@ private:
     void loadSettings();
     void setupUi();
     void createIcons();
-    void updateLayout();
+    void createLayout();
+    void updateLayoutOrientation();
     QPixmap createColoredIcon(const QString& iconPath, const QColor& color, const QSize& size = QSize(16, 16));
 
     QLabel *m_cpuLabel;
@@ -59,5 +60,12 @@ private:
     QWidget *m_ramWidget;
     QWidget *m_diskWidget;
     QWidget *m_gpuWidget;
+    
+    // Icon labels for updating icons
+    QLabel *m_cpuIconLabel;
+    QLabel *m_memIconLabel;
+    QLabel *m_ramIconLabel;
+    QLabel *m_diskIconLabel;
+    QLabel *m_gpuIconLabel;
 };
 #endif // OVERLAYWIDGET_H
