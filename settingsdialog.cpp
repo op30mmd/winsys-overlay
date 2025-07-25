@@ -7,6 +7,7 @@
 #include <QSpinBox>
 #include <QPushButton>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QGroupBox>
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
@@ -16,6 +17,10 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     // --- Appearance Group ---
     QGroupBox* appearanceGroup = new QGroupBox("Appearance");
     QFormLayout* appearanceLayout = new QFormLayout();
+
+    m_layoutOrientationComboBox = new QComboBox();
+    m_layoutOrientationComboBox->addItems({"Vertical", "Horizontal"});
+    appearanceLayout->addRow("Layout Orientation:", m_layoutOrientationComboBox);
 
     m_fontSizeSpinBox = new QSpinBox();
     m_fontSizeSpinBox->setRange(8, 24);
@@ -78,6 +83,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 void SettingsDialog::loadSettings()
 {
     QSettings s;
+    m_layoutOrientationComboBox->setCurrentText(s.value("appearance/layoutOrientation", "Vertical").toString());
     m_fontSizeSpinBox->setValue(s.value("appearance/fontSize", 11).toInt());
     m_backgroundOpacitySpinBox->setValue(s.value("appearance/backgroundOpacity", 120).toInt());
     m_updateIntervalSpinBox->setValue(s.value("behavior/updateInterval", 1000).toInt());
@@ -92,6 +98,7 @@ void SettingsDialog::loadSettings()
 void SettingsDialog::saveAndApplySettings()
 {
     QSettings s;
+    s.setValue("appearance/layoutOrientation", m_layoutOrientationComboBox->currentText());
     s.setValue("appearance/fontSize", m_fontSizeSpinBox->value());
     s.setValue("appearance/backgroundOpacity", m_backgroundOpacitySpinBox->value());
     s.setValue("behavior/updateInterval", m_updateIntervalSpinBox->value());

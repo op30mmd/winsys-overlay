@@ -36,16 +36,6 @@ void OverlayWidget::setupUi()
     m_ramLabel = new QLabel("RAM: ...", this);
     m_diskLabel = new QLabel("DSK: ...", this);
     m_gpuLabel = new QLabel("GPU: ...", this);
-
-    QVBoxLayout *layout = new QVBoxLayout(this);
-    layout->setContentsMargins(5, 2, 5, 2);
-    layout->setSpacing(0);
-    layout->addWidget(m_cpuLabel);
-    layout->addWidget(m_memLabel);
-    layout->addWidget(m_ramLabel);
-    layout->addWidget(m_diskLabel);
-    layout->addWidget(m_gpuLabel);
-    setLayout(layout);
 }
 
 void OverlayWidget::loadSettings()
@@ -55,7 +45,7 @@ void OverlayWidget::loadSettings()
     // Restore position
     move(s.value("window/pos", QPoint(100, 100)).toPoint());
 
-    // Appearance
+    // Apply appearance settings to labels
     int fontSize = s.value("appearance/fontSize", 11).toInt();
     QColor fontColor = s.value("appearance/fontColor", QColor(Qt::white)).value<QColor>();
     QString labelStyle = QString("QLabel { color: %1; font-size: %2px; font-weight: bold; }")
@@ -70,6 +60,30 @@ void OverlayWidget::loadSettings()
         effect->setOffset(0, 0);
         label->setGraphicsEffect(effect);
     }
+
+    // Delete existing layout to prepare for a new one.
+    // This is safe, as widgets are reparented to this widget.
+    if (layout()) {
+        delete layout();
+    }
+
+    // Apply new layout based on settings
+    QString orientation = s.value("appearance/layoutOrientation", "Vertical").toString();
+    QBoxLayout* newLayout;
+    if (orientation == "Horizontal") {
+        newLayout = new QHBoxLayout();
+        newLayout->setSpacing(5);
+    } else { // Default to Vertical
+        newLayout = new QVBoxLayout();
+        newLayout->setSpacing(0);
+    }
+    newLayout->setContentsMargins(5, 2, 5, 2);
+    newLayout->addWidget(m_cpuLabel);
+    newLayout->addWidget(m_memLabel);
+    newLayout->addWidget(m_ramLabel);
+    newLayout->addWidget(m_diskLabel);
+    newLayout->addWidget(m_gpuLabel);
+    setLayout(newLayout);
 
     // Visibility
     m_cpuLabel->setVisible(s.value("display/showCpu", true).toBool());

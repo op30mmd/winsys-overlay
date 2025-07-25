@@ -7,6 +7,7 @@
 class QCheckBox;
 class QSpinBox;
 class QPushButton;
+class QComboBox;
 
 class SettingsDialog : public QDialog
 {
@@ -31,6 +32,7 @@ private:
     QPushButton *m_fontColorButton;
     QPushButton *m_backgroundColorButton;
     QSpinBox *m_backgroundOpacitySpinBox;
+    QComboBox *m_layoutOrientationComboBox;
     QSpinBox *m_updateIntervalSpinBox;
     QList<QCheckBox*> m_displayChecks;
 };
