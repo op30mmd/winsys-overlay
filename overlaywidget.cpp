@@ -126,7 +126,7 @@ void OverlayWidget::loadSettings()
     // Apply appearance settings to labels
     int fontSize = s.value("appearance/fontSize", 11).toInt();
     QColor fontColor = s.value("appearance/fontColor", QColor(Qt::white)).value<QColor>();
-    QString labelStyle = QString("QLabel { color: %1; font-size: %2px; font-weight: bold; padding-left: 20px; }")
+    QString labelStyle = QString("QLabel { color: %1; font-size: %2px; font-weight: bold; }")
                              .arg(fontColor.name(QColor::HexRgb), QString::number(fontSize));
 
     for (auto* label : findChildren<QLabel*>()) {
@@ -138,13 +138,6 @@ void OverlayWidget::loadSettings()
         effect->setOffset(0, 0);
         label->setGraphicsEffect(effect);
     }
-
-    // Set icons for labels
-    m_cpuLabel->setPixmap(m_cpuIcon);
-    m_memLabel->setPixmap(m_memIcon);
-    m_ramLabel->setPixmap(m_ramIcon);
-    m_diskLabel->setPixmap(m_diskIcon);
-    m_gpuLabel->setPixmap(m_gpuIcon);
 
     // Delete existing layout to prepare for a new one.
     // This is safe, as widgets are reparented to this widget.
@@ -163,19 +156,40 @@ void OverlayWidget::loadSettings()
         newLayout->setSpacing(0);
     }
     newLayout->setContentsMargins(5, 2, 5, 2);
-    newLayout->addWidget(m_cpuLabel);
-    newLayout->addWidget(m_memLabel);
-    newLayout->addWidget(m_ramLabel);
-    newLayout->addWidget(m_diskLabel);
-    newLayout->addWidget(m_gpuLabel);
+
+    // Create horizontal layouts for each metric with icon + text
+    auto createMetricLayout = [this](QLabel* label, const QPixmap& icon) -> QWidget* {
+        QWidget* widget = new QWidget();
+        QHBoxLayout* layout = new QHBoxLayout(widget);
+        layout->setContentsMargins(0, 0, 0, 0);
+        layout->setSpacing(5);
+        
+        QLabel* iconLabel = new QLabel();
+        iconLabel->setPixmap(icon);
+        iconLabel->setFixedSize(16, 16);
+        
+        layout->addWidget(iconLabel);
+        layout->addWidget(label);
+        layout->addStretch();
+        
+        return widget;
+    };
+
+    // Add widgets with icons
+    newLayout->addWidget(createMetricLayout(m_cpuLabel, m_cpuIcon));
+    newLayout->addWidget(createMetricLayout(m_memLabel, m_memIcon));
+    newLayout->addWidget(createMetricLayout(m_ramLabel, m_ramIcon));
+    newLayout->addWidget(createMetricLayout(m_diskLabel, m_diskIcon));
+    newLayout->addWidget(createMetricLayout(m_gpuLabel, m_gpuIcon));
+    
     setLayout(newLayout);
 
     // Visibility
-    m_cpuLabel->setVisible(s.value("display/showCpu", true).toBool());
-    m_memLabel->setVisible(s.value("display/showMem", true).toBool());
-    m_ramLabel->setVisible(s.value("display/showRam", true).toBool());
-    m_diskLabel->setVisible(s.value("display/showDisk", true).toBool());
-    m_gpuLabel->setVisible(s.value("display/showGpu", true).toBool());
+    layout()->itemAt(0)->widget()->setVisible(s.value("display/showCpu", true).toBool());
+    layout()->itemAt(1)->widget()->setVisible(s.value("display/showMem", true).toBool());
+    layout()->itemAt(2)->widget()->setVisible(s.value("display/showRam", true).toBool());
+    layout()->itemAt(3)->widget()->setVisible(s.value("display/showDisk", true).toBool());
+    layout()->itemAt(4)->widget()->setVisible(s.value("display/showGpu", true).toBool());
 
     // Behavior
     m_monitor->setUpdateInterval(s.value("behavior/updateInterval", 1000).toInt());
