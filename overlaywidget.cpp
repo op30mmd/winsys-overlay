@@ -40,6 +40,13 @@ void OverlayWidget::setupUi()
     m_ramLabel = new QLabel("RAM: ...", this);
     m_diskLabel = new QLabel("DSK: ...", this);
     m_gpuLabel = new QLabel("GPU: ...", this);
+    
+    // Initialize container widgets to nullptr
+    m_cpuWidget = nullptr;
+    m_memWidget = nullptr;
+    m_ramWidget = nullptr;
+    m_diskWidget = nullptr;
+    m_gpuWidget = nullptr;
 }
 
 void OverlayWidget::createIcons()
@@ -145,20 +152,38 @@ void OverlayWidget::loadSettings()
         label->setGraphicsEffect(effect);
     }
 
-    // Delete existing layout and all child widgets to clean up properly
+    // Update the layout
+    updateLayout();
+
+    // Behavior
+    m_monitor->setUpdateInterval(s.value("behavior/updateInterval", 1000).toInt());
+
+    adjustSize();
+    update(); // Trigger a repaint
+}
+
+void OverlayWidget::updateLayout()
+{
+    QSettings s;
+    
+    // Clean up existing layout if it exists
     if (layout()) {
-        QLayoutItem *child;
-        while ((child = layout()->takeAt(0)) != nullptr) {
-            if (child->widget() && child->widget() != m_cpuLabel && 
-                child->widget() != m_memLabel && child->widget() != m_ramLabel && 
-                child->widget() != m_diskLabel && child->widget() != m_gpuLabel) {
-                // Delete container widgets but keep our main labels
-                delete child->widget();
-            }
-            delete child;
-        }
+        // Remove widgets from layout but don't delete them yet
+        if (m_cpuWidget) layout()->removeWidget(m_cpuWidget);
+        if (m_memWidget) layout()->removeWidget(m_memWidget);
+        if (m_ramWidget) layout()->removeWidget(m_ramWidget);
+        if (m_diskWidget) layout()->removeWidget(m_diskWidget);
+        if (m_gpuWidget) layout()->removeWidget(m_gpuWidget);
+        
         delete layout();
     }
+
+    // Delete existing container widgets
+    delete m_cpuWidget;
+    delete m_memWidget;
+    delete m_ramWidget;  
+    delete m_diskWidget;
+    delete m_gpuWidget;
 
     // Apply new layout based on settings
     QString orientation = s.value("appearance/layoutOrientation", "Vertical").toString();
@@ -174,12 +199,12 @@ void OverlayWidget::loadSettings()
 
     // Create horizontal layouts for each metric with icon + text
     auto createMetricLayout = [this, orientation](QLabel* label, const QPixmap& icon) -> QWidget* {
-        QWidget* widget = new QWidget();
+        QWidget* widget = new QWidget(this);
         QHBoxLayout* layout = new QHBoxLayout(widget);
         layout->setContentsMargins(0, 0, 0, 0);
         layout->setSpacing(5);
         
-        QLabel* iconLabel = new QLabel();
+        QLabel* iconLabel = new QLabel(widget);
         iconLabel->setPixmap(icon);
         iconLabel->setFixedSize(16, 16);
         iconLabel->setScaledContents(true);
@@ -195,33 +220,28 @@ void OverlayWidget::loadSettings()
         return widget;
     };
 
-    // Add widgets with icons
-    QWidget* cpuWidget = createMetricLayout(m_cpuLabel, m_cpuIcon);
-    QWidget* memWidget = createMetricLayout(m_memLabel, m_memIcon);
-    QWidget* ramWidget = createMetricLayout(m_ramLabel, m_ramIcon);
-    QWidget* diskWidget = createMetricLayout(m_diskLabel, m_diskIcon);
-    QWidget* gpuWidget = createMetricLayout(m_gpuLabel, m_gpuIcon);
+    // Create container widgets
+    m_cpuWidget = createMetricLayout(m_cpuLabel, m_cpuIcon);
+    m_memWidget = createMetricLayout(m_memLabel, m_memIcon);
+    m_ramWidget = createMetricLayout(m_ramLabel, m_ramIcon);
+    m_diskWidget = createMetricLayout(m_diskLabel, m_diskIcon);
+    m_gpuWidget = createMetricLayout(m_gpuLabel, m_gpuIcon);
 
-    newLayout->addWidget(cpuWidget);
-    newLayout->addWidget(memWidget);
-    newLayout->addWidget(ramWidget);
-    newLayout->addWidget(diskWidget);
-    newLayout->addWidget(gpuWidget);
+    // Add widgets to layout
+    newLayout->addWidget(m_cpuWidget);
+    newLayout->addWidget(m_memWidget);
+    newLayout->addWidget(m_ramWidget);
+    newLayout->addWidget(m_diskWidget);
+    newLayout->addWidget(m_gpuWidget);
     
     setLayout(newLayout);
 
-    // Visibility - use the stored widget pointers
-    cpuWidget->setVisible(s.value("display/showCpu", true).toBool());
-    memWidget->setVisible(s.value("display/showMem", true).toBool());
-    ramWidget->setVisible(s.value("display/showRam", true).toBool());
-    diskWidget->setVisible(s.value("display/showDisk", true).toBool());
-    gpuWidget->setVisible(s.value("display/showGpu", true).toBool());
-
-    // Behavior
-    m_monitor->setUpdateInterval(s.value("behavior/updateInterval", 1000).toInt());
-
-    adjustSize();
-    update(); // Trigger a repaint
+    // Apply visibility settings
+    m_cpuWidget->setVisible(s.value("display/showCpu", true).toBool());
+    m_memWidget->setVisible(s.value("display/showMem", true).toBool());
+    m_ramWidget->setVisible(s.value("display/showRam", true).toBool());
+    m_diskWidget->setVisible(s.value("display/showDisk", true).toBool());
+    m_gpuWidget->setVisible(s.value("display/showGpu", true).toBool());
 }
 
 void OverlayWidget::applySettings()
