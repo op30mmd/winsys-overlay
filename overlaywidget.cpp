@@ -2,7 +2,10 @@
 #include <QLabel>
 #include <QVBoxLayout>
 #include <QMouseEvent>
+#include <QContextMenuEvent>
 #include <QGraphicsDropShadowEffect>
+#include <QMenu>
+#include <QApplication>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -85,6 +88,14 @@ void OverlayWidget::mousePressEvent(QMouseEvent *event)
         m_dragPosition = event->globalPosition().toPoint() - frameGeometry().topLeft();
         event->accept();
     }
+}
+
+void OverlayWidget::contextMenuEvent(QContextMenuEvent *event)
+{
+    QMenu contextMenu(this);
+    QAction *closeAction = contextMenu.addAction("Close");
+    connect(closeAction, &QAction::triggered, qApp, &QApplication::quit);
+    contextMenu.exec(event->globalPos());
 }
 
 void OverlayWidget::mouseMoveEvent(QMouseEvent *event)
