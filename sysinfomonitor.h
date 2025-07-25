@@ -12,7 +12,11 @@
 
 struct SysInfo {
     double cpuLoad;
-    int memUsage;
+    DWORD memUsage; // Memory usage percentage
+    qint64 totalRamMB;
+    qint64 availRamMB;
+    double diskLoad;
+    double gpuLoad;
 };
 
 class SysInfoMonitor : public QObject
@@ -30,8 +34,14 @@ private slots:
 
 private:
     QTimer* m_timer;
+#ifdef Q_OS_WIN
     PDH_HQUERY m_cpuQuery;
     PDH_HCOUNTER m_cpuTotalCounter;
+    PDH_HQUERY m_diskQuery;
+    PDH_HCOUNTER m_diskTotalCounter;
+    PDH_HQUERY m_gpuQuery;
+    QList<PDH_HCOUNTER> m_gpuCounters;
+#endif
 };
 
 #endif // SYSINFOMONITOR_H

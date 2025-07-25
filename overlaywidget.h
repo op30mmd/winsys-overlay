@@ -25,6 +25,9 @@ protected:
 private:
     QLabel *m_cpuLabel;
     QLabel *m_memLabel;
+    QLabel *m_ramLabel;
+    QLabel *m_diskLabel;
+    QLabel *m_gpuLabel;
     SysInfoMonitor *m_monitor;
     QPoint m_dragPosition;
 };

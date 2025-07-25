@@ -18,20 +18,32 @@ OverlayWidget::OverlayWidget(QWidget *parent)
 
     m_cpuLabel = new QLabel("CPU: ...", this);
     m_memLabel = new QLabel("MEM: ...", this);
+    m_ramLabel = new QLabel("RAM: ...", this);
+    m_diskLabel = new QLabel("DSK: ...", this);
+    m_gpuLabel = new QLabel("GPU: ...", this);
 
     // Style the labels for better visibility on any background
-    const QString labelStyle = "QLabel { color: white; font-size: 14px; font-weight: bold; }";
+    const QString labelStyle = "QLabel { color: white; font-size: 11px; font-weight: bold; }";
     m_cpuLabel->setStyleSheet(labelStyle);
     m_memLabel->setStyleSheet(labelStyle);
+    m_ramLabel->setStyleSheet(labelStyle);
+    m_diskLabel->setStyleSheet(labelStyle);
+    m_gpuLabel->setStyleSheet(labelStyle);
 
     QVBoxLayout *layout = new QVBoxLayout(this);
+    layout->setContentsMargins(5, 2, 5, 2);
+    layout->setSpacing(0);
     layout->addWidget(m_cpuLabel);
     layout->addWidget(m_memLabel);
+    layout->addWidget(m_ramLabel);
+    layout->addWidget(m_diskLabel);
+    layout->addWidget(m_gpuLabel);
     setLayout(layout);
 
     connect(m_monitor, &SysInfoMonitor::statsUpdated, this, &OverlayWidget::updateStats);
 
-    resize(150, 50);
+    // Adjust size to be more compact
+    resize(120, 85);
 }
 
 OverlayWidget::~OverlayWidget()
@@ -42,6 +54,9 @@ void OverlayWidget::updateStats(const SysInfo &info)
 {
     m_cpuLabel->setText(QString("CPU: %1%").arg(info.cpuLoad, 0, 'f', 1));
     m_memLabel->setText(QString("MEM: %1%").arg(info.memUsage));
+    m_ramLabel->setText(QString("RAM: %1/%2 MB").arg(info.totalRamMB - info.availRamMB).arg(info.totalRamMB));
+    m_diskLabel->setText(QString("DSK: %1%").arg(info.diskLoad, 0, 'f', 1));
+    m_gpuLabel->setText(QString("GPU: %1%").arg(info.gpuLoad, 0, 'f', 1));
 
 #ifdef Q_OS_WIN
     // Periodically re-apply the HWND_TOPMOST flag. This is a workaround to keep the widget
