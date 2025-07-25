@@ -9,17 +9,15 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets Svg)
-
-# Enable Link-Time Optimization (LTO) if supported.
-# This allows for better optimization across the entire project,
-# resulting in a smaller and potentially faster executable.
+# Enable Link-Time Optimization (LTO) for smaller executables
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported)
 if(ipo_supported)
   set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
   message(STATUS "IPO/LTO enabled.")
 endif()
+
+find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 add_executable(winsys-overlay WIN32
     main.cpp
@@ -32,7 +30,7 @@ add_executable(winsys-overlay WIN32
 )
 
 # Link against the Performance Data Helper library on Windows
-target_link_libraries(winsys-overlay PRIVATE Qt6::Widgets Qt6::Svg pdh)
+target_link_libraries(winsys-overlay PRIVATE Qt6::Widgets pdh)
 
 if(WIN32)
     include(GNUInstallDirs)
@@ -40,18 +38,22 @@ if(WIN32)
         RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
     )
 
-    set(WINDEPLOYQT_COMMAND ${Qt6_windeployqt_EXECUTABLE}
+    # Add a post-build step to run windeployqt with optimizations.
+    # This command now correctly calls the executable and passes all the
+    # necessary arguments to reduce the final deployment size.
+    add_custom_command(TARGET winsys-overlay POST_BUILD
+        # Use the correct variable provided by Qt for the windeployqt executable
+        COMMAND ${Qt6_windeployqt_EXECUTABLE}
+        # Add arguments to reduce deployment size
         --release
         --no-translations
         --no-opengl-sw
         --no-system-d3d-compiler
         --no-vc-redist
+        # Specify output directory and the executable to deploy
         --dir "$<TARGET_FILE_DIR:winsys-overlay>"
-        "$<TARGET_FILE:winsys-overlay>")
-    # Add a post-build step to run windeployqt on the executable
-    add_custom_command(TARGET winsys-overlay POST_BUILD
-        COMMAND ${WINDEPLOYQT_COMMAND}
-        COMMENT "Running windeployqt on $<TARGET_FILE_NAME:winsys-overlay>..."
-        COMMAND_EXPAND_LISTS
+        "$<TARGET_FILE:winsys-overlay>"
+        COMMENT "Running optimized windeployqt on $<TARGET_FILE_NAME:winsys-overlay>..."
+        VERBATIM
     )
 endif()
