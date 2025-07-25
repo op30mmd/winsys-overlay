@@ -20,8 +20,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     setWindowIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
 
     // --- Appearance Group ---
-    QGroupBox* appearanceGroup = new QGroupBox("Appearance");
-    appearanceGroup->setIcon(style()->standardIcon(QStyle::SP_DesktopIcon));
+    QGroupBox* appearanceGroup = new QGroupBox("🎨 Appearance");
     QFormLayout* appearanceLayout = new QFormLayout();
 
     // Layout Orientation
@@ -95,8 +94,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     appearanceGroup->setLayout(appearanceLayout);
 
     // --- Display Group ---
-    QGroupBox* displayGroup = new QGroupBox("Displayed Information");
-    displayGroup->setIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
+    QGroupBox* displayGroup = new QGroupBox("📊 Displayed Information");
     QVBoxLayout* displayLayout = new QVBoxLayout();
     
     // Create checkboxes with icons
@@ -126,8 +124,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     displayGroup->setLayout(displayLayout);
 
     // --- Behavior Group ---
-    QGroupBox* behaviorGroup = new QGroupBox("Behavior");
-    behaviorGroup->setIcon(style()->standardIcon(QStyle::SP_BrowserReload));
+    QGroupBox* behaviorGroup = new QGroupBox("⚙️ Behavior");
     QFormLayout* behaviorLayout = new QFormLayout();
     
     QHBoxLayout* intervalLayout = new QHBoxLayout();
