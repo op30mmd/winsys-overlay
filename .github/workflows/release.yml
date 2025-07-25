@@ -78,11 +78,13 @@ jobs:
         shell: powershell
 
       - name: Compress Executables with UPX
-        if: env.UPX_PATH != '' && steps.package.outputs.error == ''
+        if: env.UPX_PATH != ''
         run: |
           echo "Compressing executables with UPX..."
-          "%UPX_PATH%" --best --lzma build/Release/*.exe
-          "%UPX_PATH%" --best --lzma build/Release/*.dll
+          echo "Compressing main executable..."
+          "%UPX_PATH%" --best --lzma build/Release/winsys-overlay.exe
+          echo "Compressing DLLs (forcing due to GUARD_CF)..."
+          "%UPX_PATH%" --best --lzma --force build/Release/*.dll
         shell: cmd
 
       - name: Package Release Files
