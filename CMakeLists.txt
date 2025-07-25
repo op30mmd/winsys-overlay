@@ -22,10 +22,24 @@ message(STATUS "Using CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
-# Check if the windeployqt tool was found before trying to use it.
+# Find windeployqt manually if not found by Qt6 package
 if(NOT Qt6_windeployqt_EXECUTABLE)
+    # Try to find windeployqt in the Qt bin directory
+    find_program(Qt6_windeployqt_EXECUTABLE
+        NAMES windeployqt.exe windeployqt
+        PATHS ${CMAKE_PREFIX_PATH}/bin
+        NO_DEFAULT_PATH
+    )
+endif()
+
+# Check if we found windeployqt
+if(NOT Qt6_windeployqt_EXECUTABLE)
+    message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
+    message(STATUS "Looking for windeployqt in: ${CMAKE_PREFIX_PATH}/bin")
     message(FATAL_ERROR "Failed to find windeployqt.exe. Ensure your Qt installation is correct and CMAKE_PREFIX_PATH is set properly.")
 endif()
+
+message(STATUS "Found windeployqt: ${Qt6_windeployqt_EXECUTABLE}")
 
 # Get the directory containing the Qt binaries. This is crucial for the post-build step.
 get_filename_component(QT_BIN_DIR "${Qt6_windeployqt_EXECUTABLE}" DIRECTORY)
