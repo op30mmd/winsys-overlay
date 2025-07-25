@@ -42,8 +42,8 @@ if(WIN32)
 
     # Add a post-build step to run windeployqt on the executable
     add_custom_command(TARGET winsys-overlay POST_BUILD
-        COMMAND ${Qt6_windeployqt_EXECUTABLE}
-        ARGS
+        COMMAND
+            ${Qt6_windeployqt_EXECUTABLE}
             --release
             --no-translations
             --no-opengl-sw
