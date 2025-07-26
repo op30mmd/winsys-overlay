@@ -52,97 +52,128 @@ target_link_libraries(winsys-overlay PRIVATE
     pdh psapi iphlpapi ws2_32 wbemuuid
 )
 
-# --- Deployment & Installation ---
+# --- Clean Deployment ---
 
-# Install only the essential files
-set(DEPLOY_SOURCE_DIR "${CMAKE_BINARY_DIR}/bin/Release")
+# Create a clean install directory structure
+# Install only the specific files we need, nothing else
 
-# Install main executable
+# Main application executable
 install(
-    FILES "${DEPLOY_SOURCE_DIR}/winsys-overlay.exe"
+    FILES "${CMAKE_BINARY_DIR}/bin/Release/winsys-overlay.exe"
     DESTINATION "bin"
     COMPONENT Application
 )
 
-# Install C# helper and its dependency
+# C# helper executable and its dependency
 install(
     FILES 
-        "${DEPLOY_SOURCE_DIR}/TempReader.exe"
-        "${DEPLOY_SOURCE_DIR}/LibreHardwareMonitorLib.dll"
+        "${CMAKE_BINARY_DIR}/bin/Release/TempReader.exe"
+        "${CMAKE_BINARY_DIR}/bin/Release/LibreHardwareMonitorLib.dll"
     DESTINATION "bin"
     COMPONENT Application
 )
 
-# Install only essential Qt DLLs (will be populated by windeployqt)
-# Note: This will be handled by a custom install script
+# License file
+install(
+    FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" 
+    DESTINATION "." 
+    RENAME "LICENSE.txt" 
+    COMPONENT Application
+)
+
+# Custom command to run windeployqt and install only necessary Qt files
 install(CODE "
-    # Find windeployqt
-    find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS \${CMAKE_PREFIX_PATH}/bin)
+    set(QT_DEPLOY_DIR \"\${CMAKE_INSTALL_PREFIX}/bin\")
+    message(STATUS \"Deploying Qt to: \${QT_DEPLOY_DIR}\")
     
-    if(WINDEPLOYQT_EXECUTABLE)
-        message(STATUS \"Running windeployqt on \${CMAKE_INSTALL_PREFIX}/bin/winsys-overlay.exe\")
-        execute_process(
-            COMMAND \"\${WINDEPLOYQT_EXECUTABLE}\" 
-                --release 
-                --no-translations 
-                --no-system-d3d-compiler 
-                --no-opengl-sw 
-                --no-compiler-runtime
-                --force
-                \"\${CMAKE_INSTALL_PREFIX}/bin/winsys-overlay.exe\"
-            WORKING_DIRECTORY \"\${CMAKE_INSTALL_PREFIX}/bin\"
-            RESULT_VARIABLE WINDEPLOYQT_RESULT
-        )
-        
-        if(NOT WINDEPLOYQT_RESULT EQUAL 0)
-            message(WARNING \"windeployqt failed with result: \${WINDEPLOYQT_RESULT}\")
-        endif()
-        
-        # Remove unnecessary Qt files that windeployqt might have copied
-        file(GLOB UNNECESSARY_FILES
-            \"\${CMAKE_INSTALL_PREFIX}/bin/Qt6Quick*\"
-            \"\${CMAKE_INSTALL_PREFIX}/bin/Qt6Qml*\"
-            \"\${CMAKE_INSTALL_PREFIX}/bin/Qt6Network*\"
-            \"\${CMAKE_INSTALL_PREFIX}/bin/Qt6Sql*\"
-            \"\${CMAKE_INSTALL_PREFIX}/bin/Qt6Test*\"
-            \"\${CMAKE_INSTALL_PREFIX}/bin/Qt6WebEngine*\"
-            \"\${CMAKE_INSTALL_PREFIX}/bin/Qt6Multimedia*\"
-            \"\${CMAKE_INSTALL_PREFIX}/bin/opengl32sw.dll\"
-            \"\${CMAKE_INSTALL_PREFIX}/bin/d3dcompiler_*.dll\"
-        )
-        
-        foreach(UNNECESSARY_FILE \${UNNECESSARY_FILES})
-            if(EXISTS \"\${UNNECESSARY_FILE}\")
-                file(REMOVE \"\${UNNECESSARY_FILE}\")
-                message(STATUS \"Removed unnecessary file: \${UNNECESSARY_FILE}\")
-            endif()
+    # Find windeployqt
+    find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS \"${CMAKE_PREFIX_PATH}/bin\")
+    
+    if(NOT WINDEPLOYQT_EXECUTABLE)
+        message(FATAL_ERROR \"windeployqt not found at ${CMAKE_PREFIX_PATH}/bin\")
+    endif()
+    
+    # Run windeployqt with minimal options
+    execute_process(
+        COMMAND \"\${WINDEPLOYQT_EXECUTABLE}\" 
+            --release 
+            --no-translations 
+            --no-system-d3d-compiler 
+            --no-opengl-sw 
+            --no-compiler-runtime
+            --no-quick-import
+            --force
+            \"\${QT_DEPLOY_DIR}/winsys-overlay.exe\"
+        WORKING_DIRECTORY \"\${QT_DEPLOY_DIR}\"
+        RESULT_VARIABLE DEPLOY_RESULT
+        OUTPUT_VARIABLE DEPLOY_OUTPUT
+        ERROR_VARIABLE DEPLOY_ERROR
+    )
+    
+    if(NOT DEPLOY_RESULT EQUAL 0)
+        message(FATAL_ERROR \"windeployqt failed: \${DEPLOY_ERROR}\")
+    endif()
+    
+    message(STATUS \"windeployqt completed successfully\")
+    
+    # Remove any unnecessary Qt DLLs that windeployqt might have copied
+    set(UNNECESSARY_PATTERNS
+        \"Qt6Quick*.dll\"
+        \"Qt6Qml*.dll\" 
+        \"Qt6Network*.dll\"
+        \"Qt6Sql*.dll\"
+        \"Qt6Test*.dll\"
+        \"Qt6WebEngine*.dll\"
+        \"Qt6Multimedia*.dll\"
+        \"opengl32sw.dll\"
+        \"d3dcompiler_*.dll\"
+    )
+    
+    foreach(PATTERN \${UNNECESSARY_PATTERNS})
+        file(GLOB FILES_TO_REMOVE \"\${QT_DEPLOY_DIR}/\${PATTERN}\")
+        foreach(FILE_TO_REMOVE \${FILES_TO_REMOVE})
+            file(REMOVE \"\${FILE_TO_REMOVE}\")
+            get_filename_component(FILENAME \"\${FILE_TO_REMOVE}\" NAME)
+            message(STATUS \"Removed unnecessary file: \${FILENAME}\")
         endforeach()
-        
-        # Remove unnecessary platform plugins (keep only qwindows.dll)
-        file(GLOB PLATFORM_PLUGINS \"\${CMAKE_INSTALL_PREFIX}/bin/platforms/*.dll\")
+    endforeach()
+    
+    # Clean up platform plugins (keep only qwindows.dll)
+    set(PLATFORMS_DIR \"\${QT_DEPLOY_DIR}/platforms\")
+    if(EXISTS \"\${PLATFORMS_DIR}\")
+        file(GLOB PLATFORM_PLUGINS \"\${PLATFORMS_DIR}/*.dll\")
         foreach(PLUGIN \${PLATFORM_PLUGINS})
             get_filename_component(PLUGIN_NAME \"\${PLUGIN}\" NAME)
             if(NOT PLUGIN_NAME STREQUAL \"qwindows.dll\")
                 file(REMOVE \"\${PLUGIN}\")
-                message(STATUS \"Removed unnecessary platform plugin: \${PLUGIN}\")
+                message(STATUS \"Removed platform plugin: \${PLUGIN_NAME}\")
             endif()
         endforeach()
-        
-        # Remove imageformats we don't need (keep basic ones)
-        file(GLOB IMAGE_PLUGINS \"\${CMAKE_INSTALL_PREFIX}/bin/imageformats/*.dll\")
-        set(KEEP_IMAGE_PLUGINS \"qico.dll\" \"qjpeg.dll\" \"qpng.dll\" \"qgif.dll\")
+    endif()
+    
+    # Clean up imageformat plugins (keep only essential ones)
+    set(IMAGEFORMATS_DIR \"\${QT_DEPLOY_DIR}/imageformats\")
+    if(EXISTS \"\${IMAGEFORMATS_DIR}\")
+        file(GLOB IMAGE_PLUGINS \"\${IMAGEFORMATS_DIR}/*.dll\")
+        set(KEEP_PLUGINS \"qico.dll\" \"qjpeg.dll\" \"qpng.dll\" \"qgif.dll\")
         foreach(PLUGIN \${IMAGE_PLUGINS})
             get_filename_component(PLUGIN_NAME \"\${PLUGIN}\" NAME)
-            list(FIND KEEP_IMAGE_PLUGINS \"\${PLUGIN_NAME}\" KEEP_INDEX)
-            if(KEEP_INDEX EQUAL -1)
+            list(FIND KEEP_PLUGINS \"\${PLUGIN_NAME}\" FOUND_INDEX)
+            if(FOUND_INDEX EQUAL -1)
                 file(REMOVE \"\${PLUGIN}\")
-                message(STATUS \"Removed unnecessary image plugin: \${PLUGIN}\")
+                message(STATUS \"Removed image plugin: \${PLUGIN_NAME}\")
             endif()
         endforeach()
-        
-    else()
-        message(WARNING \"windeployqt not found - Qt libraries may not be deployed correctly\")
     endif()
+    
+    # List final contents for verification
+    message(STATUS \"Final installation contents:\")
+    file(GLOB_RECURSE ALL_INSTALLED_FILES \"\${CMAKE_INSTALL_PREFIX}/*\")
+    foreach(INSTALLED_FILE \${ALL_INSTALLED_FILES})
+        file(RELATIVE_PATH REL_PATH \"\${CMAKE_INSTALL_PREFIX}\" \"\${INSTALLED_FILE}\")
+        message(STATUS \"  \${REL_PATH}\")
+    endforeach()
+    
 " COMPONENT Application)
 
 # --- CPack Configuration ---
@@ -157,29 +188,35 @@ set(CPACK_GENERATOR "NSIS")
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-win64")
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 
-# NSIS specific settings for smaller package
-set(CPACK_NSIS_PACKAGE_NAME "${PROJECT_NAME} ${CPACK_PACKAGE_VERSION} Installer")
+# NSIS specific settings
+set(CPACK_NSIS_PACKAGE_NAME "${PROJECT_NAME} ${CPACK_PACKAGE_VERSION}")
 set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES")
-set(CPACK_NSIS_COMPONENT_SECTION_NAME_ENABLE ON)
-set(CPACK_NSIS_DISPLAY_NAME "${CPACK_PACKAGE_NAME} version ${CPACK_PACKAGE_VERSION}")
+set(CPACK_NSIS_DISPLAY_NAME "${CPACK_PACKAGE_NAME}")
 set(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\\\winsys-overlay.exe")
+
+# Create desktop shortcut
 set(CPACK_NSIS_CREATE_ICONS_EXTRA "CreateShortCut '$DESKTOP\\\\${CPACK_PACKAGE_NAME}.lnk' '$INSTDIR\\\\bin\\\\winsys-overlay.exe'")
 set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\\\${CPACK_PACKAGE_NAME}.lnk'")
 
-# Enable compression for smaller installer
+# Enable solid LZMA compression for smallest installer
 set(CPACK_NSIS_COMPRESSOR "/SOLID lzma")
 set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 
-# Exclude common unnecessary files
-set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS "
-    ; Remove any debug files that might have been included
-    Delete \\\"$INSTDIR\\\\bin\\\\*.pdb\\\"
-    Delete \\\"$INSTDIR\\\\bin\\\\*d.dll\\\"
-    RMDir /r \\\"$INSTDIR\\\\bin\\\\debug\\\"
-")
-
-# Define components for CPack
+# Only include the Application component
 set(CPACK_COMPONENTS_ALL Application)
-install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" DESTINATION "." RENAME "LICENSE.txt" COMPONENT Application)
+
+# Don't include any source or build files
+set(CPACK_SOURCE_IGNORE_FILES
+    "/build/"
+    "/.git/"
+    "/.github/"
+    "/CMakeFiles/"
+    "CMakeCache.txt"
+    "/*.vcxproj"
+    "/*.sln"
+    "/Debug/"
+    "/Release/"
+    "/.vs/"
+)
 
 include(CPack)
