@@ -54,8 +54,8 @@ jobs:
         if: env.QT_DIR != ''
         run: |
           call "%VCVARS_PATH%"
-          echo "Deploying Qt dependencies to build/bin/Release..."
-          "%QT_DIR%\bin\windeployqt.exe" --release --no-translations build\bin\Release
+          echo "Deploying Qt dependencies for winsys-overlay.exe..."
+          "%QT_DIR%\bin\windeployqt.exe" --release --no-translations build\bin\Release\winsys-overlay.exe
         shell: cmd
 
       - name: Package with CPack
