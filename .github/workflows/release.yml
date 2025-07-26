@@ -47,6 +47,12 @@ jobs:
           cmake --build build --config Release
         shell: cmd
 
+      - name: Copy C# Helper to Release Directory
+        run: |
+          xcopy /y build\bin\TempReader.exe build\bin\Release\
+          xcopy /y build\bin\LibreHardwareMonitorLib.dll build\bin\Release\
+        shell: cmd
+
       - name: Optimize and Compress Release Files
         if: env.UPX_PATH != ''
         run: |
