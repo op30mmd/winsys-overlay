@@ -10,6 +10,7 @@ env:
   QT_DIR: C:\Qt\6.9.1\msvc2022_64
   VCVARS_PATH: 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat'
   UPX_PATH: 'C:\upx\upx.exe'
+  SEVENZIP_PATH: 'C:\Program Files\7-Zip\7z.exe'
 
 jobs:
   build-and-release:
@@ -96,33 +97,50 @@ jobs:
         shell: cmd
         continue-on-error: true
 
+      - name: Get Pre-compression Size
+        run: |
+          echo "=== Pre-compression size analysis ==="
+          cd build\bin\Release
+          powershell -Command "Get-ChildItem -Recurse | Measure-Object -Property Length -Sum | ForEach-Object { 'Total size: {0:N0} bytes ({1:N2} MB)' -f $_.Sum, ($_.Sum / 1MB) }"
+        shell: cmd
+
       - name: Optimize and Compress Release Files
         if: env.UPX_PATH != ''
         run: |
           echo "--- Reducing package size by removing unnecessary files ---"
           del /q /s build\bin\Release\*.pdb > nul 2>&1
 
-          echo "--- Compressing native executables and DLLs with UPX ---"
+          echo "--- Compressing ONLY the main executable (Qt DLLs cause issues with UPX) ---"
           echo "Compressing main executable..."
           "%UPX_PATH%" --best --lzma build/bin/Release/winsys-overlay.exe
           
-          echo "Compressing native DLLs (forcing due to GUARD_CF)..."
-          for %%F in (build\bin\Release\Qt6*.dll) do (
-            echo Compressing %%F
-            "%UPX_PATH%" --best --lzma --force "%%F"
-          )
+          echo "--- Skipping Qt DLL compression (causes crashes) ---"
+          echo "Qt6Core.dll - SKIPPED (UPX breaks Qt6 DLLs)"
+          echo "Qt6Gui.dll - SKIPPED (UPX breaks Qt6 DLLs)" 
+          echo "Qt6Widgets.dll - SKIPPED (UPX breaks Qt6 DLLs)"
           
-          echo "Compressing platform plugins..."
-          if exist build\bin\Release\platforms\qwindows.dll (
-            echo Compressing qwindows.dll
-            "%UPX_PATH%" --best --lzma --force build\bin\Release\platforms\qwindows.dll
+          echo "--- Skipping platform plugin compression (causes crashes) ---"
+          echo "qwindows.dll - SKIPPED (UPX breaks Qt6 platform plugins)"
+          echo "qminimal.dll - SKIPPED (UPX breaks Qt6 platform plugins)"
+          
+          echo "--- Compressing other safe files ---"
+          if exist build\bin\Release\D3Dcompiler_47.dll (
+            echo "Compressing D3Dcompiler_47.dll..."
+            "%UPX_PATH%" --best --lzma build/bin/Release/D3Dcompiler_47.dll
           )
-          if exist build\bin\Release\platforms\qminimal.dll (
-            echo Compressing qminimal.dll
-            "%UPX_PATH%" --best --lzma --force build\bin\Release\platforms\qminimal.dll
+          if exist build\bin\Release\opengl32sw.dll (
+            echo "Compressing opengl32sw.dll..."
+            "%UPX_PATH%" --best --lzma build/bin/Release/opengl32sw.dll
           )
 
           echo "Skipping .NET assemblies (TempReader.exe, LibreHardwareMonitorLib.dll) as they are not supported by UPX."
+        shell: cmd
+
+      - name: Get Post-compression Size
+        run: |
+          echo "=== Post-compression size analysis ==="
+          cd build\bin\Release
+          powershell -Command "Get-ChildItem -Recurse | Measure-Object -Property Length -Sum | ForEach-Object { 'Total size: {0:N0} bytes ({1:N2} MB)' -f $_.Sum, ($_.Sum / 1MB) }"
         shell: cmd
 
       - name: Final Application Test
@@ -137,25 +155,75 @@ jobs:
         shell: cmd
         continue-on-error: true
 
-      - name: Package Release Files
-        id: package
+      - name: Package with 7-Zip (High Compression)
+        id: package_7z
         run: |
+          echo "=== Creating 7-Zip archive with maximum compression ==="
+          cd build\bin\Release
+          set "ARCHIVE_NAME=winsys-overlay-${{ steps.get_version.outputs.VERSION }}.7z"
+          echo "Creating archive: %ARCHIVE_NAME%"
+          
+          if exist "%SEVENZIP_PATH%" (
+            echo "Using 7-Zip for maximum compression..."
+            "%SEVENZIP_PATH%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mmt=on "../../../%ARCHIVE_NAME%" *
+            
+            echo "=== Archive created successfully ==="
+            dir "..\..\..\%ARCHIVE_NAME%"
+            powershell -Command "$size = (Get-Item '../../../%ARCHIVE_NAME%').Length; 'Archive size: {0:N0} bytes ({1:N2} MB)' -f $size, ($size / 1MB)"
+            
+            echo "ARCHIVE_7Z=%ARCHIVE_NAME%" >> %GITHUB_OUTPUT%
+          ) else (
+            echo "7-Zip not found at %SEVENZIP_PATH%, falling back to PowerShell compression"
+            powershell -Command "Compress-Archive -Path * -DestinationPath '../../../winsys-overlay-${{ steps.get_version.outputs.VERSION }}.zip' -CompressionLevel Optimal -Force"
+            echo "ARCHIVE_7Z=winsys-overlay-${{ steps.get_version.outputs.VERSION }}.zip" >> %GITHUB_OUTPUT%
+          )
+        shell: cmd
+
+      - name: Package with ZIP (Fallback/Alternative)
+        id: package_zip
+        run: |
+          echo "=== Creating ZIP archive for compatibility ==="
           $archiveName = "winsys-overlay-${{ steps.get_version.outputs.VERSION }}.zip"
-          Compress-Archive -Path build/bin/Release/* -DestinationPath $archiveName -Force
-          "ARCHIVE_NAME=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Compress-Archive -Path build/bin/Release/* -DestinationPath $archiveName -CompressionLevel Optimal -Force
+          $size = (Get-Item $archiveName).Length
+          Write-Host "ZIP Archive size: $($size.ToString('N0')) bytes ($([math]::Round($size / 1MB, 2)) MB)"
+          "ARCHIVE_ZIP=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: powershell
 
-      - name: Upload Build Artifact
+      - name: Compare Archive Sizes
+        run: |
+          echo "=== Archive size comparison ==="
+          if exist "${{ steps.package_7z.outputs.ARCHIVE_7Z }}" (
+            powershell -Command "$size7z = (Get-Item '${{ steps.package_7z.outputs.ARCHIVE_7Z }}').Length; $sizeZip = (Get-Item '${{ steps.package_zip.outputs.ARCHIVE_ZIP }}').Length; $savings = [math]::Round((($sizeZip - $size7z) / $sizeZip) * 100, 1); Write-Host '7-Zip: {0:N0} bytes ({1:N2} MB)' -f $size7z, ($size7z / 1MB); Write-Host 'ZIP: {0:N0} bytes ({1:N2} MB)' -f $sizeZip, ($sizeZip / 1MB); Write-Host 'Space saved with 7-Zip: {0}%' -f $savings"
+          )
+        shell: cmd
+
+      - name: Upload 7-Zip Build Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: winsys-overlay-build
-          path: ${{ steps.package.outputs.ARCHIVE_NAME }}
+          name: winsys-overlay-build-7z
+          path: ${{ steps.package_7z.outputs.ARCHIVE_7Z }}
+
+      - name: Upload ZIP Build Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winsys-overlay-build-zip
+          path: ${{ steps.package_zip.outputs.ARCHIVE_ZIP }}
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.package.outputs.ARCHIVE_NAME }}
+          files: |
+            ${{ steps.package_7z.outputs.ARCHIVE_7Z }}
+            ${{ steps.package_zip.outputs.ARCHIVE_ZIP }}
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
-          body: "Automated release for version ${{ github.ref_name }}."
+          body: |
+            Automated release for version ${{ github.ref_name }}.
+            
+            ## Download Options:
+            - **🗜️ winsys-overlay-${{ github.ref_name }}.7z** - Smallest size (7-Zip format, maximum compression)
+            - **📦 winsys-overlay-${{ github.ref_name }}.zip** - Standard ZIP format for compatibility
+            
+            Both archives contain the same files. Choose 7z for smallest download size or ZIP for better compatibility.
