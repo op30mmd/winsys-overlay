@@ -32,6 +32,11 @@ add_executable(winsys-overlay WIN32
     settingsdialog.cpp
 )
 
+# Explicitly tell the executable where to find the wrapper library's .lib file
+target_link_directories(winsys-overlay PRIVATE
+    $<TARGET_FILE_DIR:HardwareMonitorWrapper>
+)
+
 # Link the main application against the wrapper library
 target_link_libraries(winsys-overlay PRIVATE 
     Qt6::Widgets 
