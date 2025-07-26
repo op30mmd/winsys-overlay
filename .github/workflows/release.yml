@@ -41,7 +41,7 @@ jobs:
       - name: Configure CMake
         run: |
           call "%VCVARS_PATH%"
-          cmake -S . -B build -DCMAKE_PREFIX_PATH="%QT_DIR%"
+          cmake -S . -B build -DCMAKE_PREFIX_PATH="%QT_DIR%" -DCMAKE_BUILD_TYPE=Release
         shell: cmd
 
       - name: Build with CMake
@@ -50,12 +50,53 @@ jobs:
           cmake --build build --config Release
         shell: cmd
       
-      - name: Deploy Qt Dependencies
+      - name: Deploy Qt Dependencies (Minimal)
         if: env.QT_DIR != ''
         run: |
           call "%VCVARS_PATH%"
-          echo "Deploying Qt dependencies for winsys-overlay.exe..."
-          "%QT_DIR%\bin\windeployqt.exe" --release --no-translations build\bin\Release\winsys-overlay.exe
+          echo "Deploying minimal Qt dependencies for winsys-overlay.exe..."
+          "%QT_DIR%\bin\windeployqt.exe" --release --no-translations --no-system-d3d-compiler --no-opengl-sw --no-compiler-runtime --force build\bin\Release\winsys-overlay.exe
+          
+          echo "Cleaning up unnecessary Qt files..."
+          cd build\bin\Release
+          
+          REM Remove unnecessary Qt modules
+          del /Q /F Qt6Quick*.dll 2>nul
+          del /Q /F Qt6Qml*.dll 2>nul
+          del /Q /F Qt6Network*.dll 2>nul
+          del /Q /F Qt6Sql*.dll 2>nul
+          del /Q /F Qt6Test*.dll 2>nul
+          del /Q /F Qt6WebEngine*.dll 2>nul
+          del /Q /F Qt6Multimedia*.dll 2>nul
+          del /Q /F opengl32sw.dll 2>nul
+          del /Q /F d3dcompiler_*.dll 2>nul
+          
+          REM Keep only essential platform plugin
+          cd platforms
+          for %%f in (*.dll) do if not "%%f"=="qwindows.dll" del "%%f"
+          cd ..
+          
+          REM Keep only essential image format plugins
+          cd imageformats
+          for %%f in (*.dll) do (
+            if not "%%f"=="qico.dll" if not "%%f"=="qjpeg.dll" if not "%%f"=="qpng.dll" if not "%%f"=="qgif.dll" del "%%f"
+          )
+          cd ..
+          
+          echo "Qt cleanup completed."
+        shell: cmd
+
+      - name: Compress Executables with UPX (Optional)
+        if: env.UPX_PATH != ''
+        run: |
+          if exist "%UPX_PATH%" (
+            echo "Compressing executables with UPX..."
+            "%UPX_PATH%" --best --lzma build\bin\Release\winsys-overlay.exe
+            "%UPX_PATH%" --best --lzma build\bin\Release\TempReader.exe
+            echo "UPX compression completed."
+          ) else (
+            echo "UPX not found, skipping compression."
+          )
         shell: cmd
 
       - name: Package with CPack
@@ -64,7 +105,7 @@ jobs:
           call "%VCVARS_PATH%"
           cd build
           echo "Running CPack to create installer..."
-          cpack -C Release
+          cpack -C Release -G NSIS
           echo "CPack finished. Searching for installer file..."
           for %%F in (WinSysOverlay-*.exe) do (
             echo "Found installer: %%F"
@@ -74,6 +115,16 @@ jobs:
           echo "ERROR: CPack installer WinSysOverlay-*.exe not found in build directory!"
           exit /b 1
           :found
+        shell: cmd
+
+      - name: Display Package Size
+        run: |
+          set "INSTALLER_PATH=build\${{ steps.package_installer.outputs.INSTALLER_NAME }}"
+          for %%A in ("%INSTALLER_PATH%") do (
+            echo "Installer size: %%~zA bytes"
+            set /a SIZE_MB=%%~zA/1024/1024
+            echo "Installer size: !SIZE_MB! MB"
+          )
         shell: cmd
 
       - name: Upload Installer Artifact
@@ -91,6 +142,13 @@ jobs:
           echo "Compressing %INSTALLER_PATH% to %ARCHIVE_7Z_NAME%..."
           "%SEVENZIP_PATH%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on "%ARCHIVE_7Z_NAME%" "%INSTALLER_PATH%"
           echo "ARCHIVE_7Z_PATH=%ARCHIVE_7Z_NAME%" >> %GITHUB_OUTPUT%
+          
+          REM Display compressed size
+          for %%A in ("%ARCHIVE_7Z_NAME%") do (
+            echo "Compressed size: %%~zA bytes"
+            set /a SIZE_MB=%%~zA/1024/1024
+            echo "Compressed size: !SIZE_MB! MB"
+          )
         shell: cmd
 
       - name: Upload Compressed Artifact
@@ -113,5 +171,12 @@ jobs:
             Automated release for version ${{ github.ref_name }}.
             
             ## Download Options
-            - **Installer** (`${{ steps.package_installer.outputs.INSTALLER_NAME }}`): The standard, uncompressed installer.
-            - **7-Zip Archive** (`${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}`): The installer in a highly compressed 7z archive for a smaller download.
+            - **Installer** (`${{ steps.package_installer.outputs.INSTALLER_NAME }}`): The standard installer with optimized Qt deployment.
+            - **7-Zip Archive** (`${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}`): The installer in a highly compressed 7z archive for minimal download size.
+            
+            ## Size Optimizations
+            - Removed unnecessary Qt modules (Quick, QML, Network, SQL, etc.)
+            - Kept only essential platform plugins (qwindows.dll)
+            - Minimized imageformat plugins to basic formats
+            - Applied LZMA compression to installer
+            - Optional UPX compression for executables
