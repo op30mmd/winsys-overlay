@@ -14,8 +14,17 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
     m_tempQuery = nullptr;
     m_pLocator = nullptr;
     m_pServices = nullptr;
+    m_iAdlAdapterCount = 0;
+    m_lpAdlAdapterInfo = nullptr;
     
     nvmlInit_v2();
+    if (adl_init() == 0) {
+        adl_adapter_numberofadapters_get(&m_iAdlAdapterCount);
+        if (m_iAdlAdapterCount > 0) {
+            m_lpAdlAdapterInfo = (LPAdapterInfo)malloc(sizeof(AdapterInfo) * m_iAdlAdapterCount);
+            adl_adapter_adapterinfo_get(m_lpAdlAdapterInfo, sizeof(AdapterInfo) * m_iAdlAdapterCount);
+        }
+    }
 
     // Initialize network tracking
     m_lastBytesReceived = 0;
@@ -214,6 +223,10 @@ SysInfoMonitor::~SysInfoMonitor()
     if (m_pLocator) m_pLocator->Release();
     CoUninitialize();
 
+    if (m_lpAdlAdapterInfo) {
+        free(m_lpAdlAdapterInfo);
+    }
+    adl_shutdown();
     nvmlShutdown();
 }
 
@@ -393,6 +406,23 @@ void SysInfoMonitor::updateTemperatures(SysInfo& info)
         info.gpuTemp = maxGpuTemp;
     } else {
         info.gpuTemp = 0.0;
+    }
+
+    if (m_iAdlAdapterCount > 0) {
+        double maxGpuTemp = 0.0;
+        for (int i = 0; i < m_iAdlAdapterCount; i++) {
+            ADLTemperature adlTemp = { 0 };
+            adlTemp.iSize = sizeof(ADLTemperature);
+            if (adl_overdrive5_temperature_get(m_lpAdlAdapterInfo[i].iAdapterIndex, 0, &adlTemp) == 0) {
+                double temp = adlTemp.iTemperature / 1000.0;
+                if (temp > maxGpuTemp) {
+                    maxGpuTemp = temp;
+                }
+            }
+        }
+        if (maxGpuTemp > info.gpuTemp) {
+            info.gpuTemp = maxGpuTemp;
+        }
     }
 }
 

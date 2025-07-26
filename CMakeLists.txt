@@ -51,6 +51,7 @@ add_executable(winsys-overlay WIN32
     settingsdialog.h
     settingsdialog.cpp
     nvml.cpp
+    adl.cpp
 )
 
 # Link against required Windows libraries for enhanced monitoring

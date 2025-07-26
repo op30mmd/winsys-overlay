@@ -14,6 +14,7 @@
 #include <psapi.h>
 #include <netioapi.h>
 #include "nvml.h"
+#include "adl.h"
 #include <WbemIdl.h>
 #endif
 
@@ -93,6 +94,10 @@ private:
     // WMI
     IWbemLocator* m_pLocator;
     IWbemServices* m_pServices;
+
+    // ADL
+    int m_iAdlAdapterCount;
+    LPAdapterInfo m_lpAdlAdapterInfo;
 #endif
 };
 
