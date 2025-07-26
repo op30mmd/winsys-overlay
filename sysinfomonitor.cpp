@@ -1,6 +1,5 @@
 #include "sysinfomonitor.h"
 #include <comutil.h>
-#include <comdef.h>
 #include <QDebug>
 #include <QVector>
 #include <QSettings>
