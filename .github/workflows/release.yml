@@ -47,18 +47,51 @@ jobs:
 
       - name: Deploy Qt Dependencies
         run: |
-          echo "Deploying Qt dependencies..."
-          %QT_DIR%\bin\windeployqt.exe --release --no-translations build/bin/Release/winsys-overlay.exe
-          echo "Verifying platform plugin deployment..."
-          if exist build\bin\Release\platforms\qwindows.dll (
-            echo "✓ Platform plugin qwindows.dll found"
+          echo "=== Deploying Qt dependencies ==="
+          %QT_DIR%\bin\windeployqt.exe --release --no-translations --verbose 2 build/bin/Release/winsys-overlay.exe
+          
+          echo "=== Verifying deployment structure ==="
+          dir build\bin\Release
+          
+          echo "=== Checking platform plugins ==="
+          if exist build\bin\Release\platforms (
+            dir build\bin\Release\platforms
+            if exist build\bin\Release\platforms\qwindows.dll (
+              echo "✓ qwindows.dll found"
+            ) else (
+              echo "✗ qwindows.dll missing"
+            )
           ) else (
-            echo "✗ Platform plugin qwindows.dll missing - manually copying..."
-            mkdir build\bin\Release\platforms
-            copy "%QT_DIR%\plugins\platforms\qwindows.dll" build\bin\Release\platforms\
-            copy "%QT_DIR%\plugins\platforms\qminimal.dll" build\bin\Release\platforms\
+            echo "✗ platforms directory missing"
           )
+          
+          echo "=== Manual platform plugin deployment ==="
+          if not exist build\bin\Release\platforms mkdir build\bin\Release\platforms
+          copy "%QT_DIR%\plugins\platforms\qwindows.dll" build\bin\Release\platforms\
+          copy "%QT_DIR%\plugins\platforms\qminimal.dll" build\bin\Release\platforms\
+          
+          echo "=== Copying additional required DLLs ==="
+          copy "%QT_DIR%\bin\Qt6Core.dll" build\bin\Release\
+          copy "%QT_DIR%\bin\Qt6Gui.dll" build\bin\Release\
+          copy "%QT_DIR%\bin\Qt6Widgets.dll" build\bin\Release\
+          
+          echo "=== Final verification ==="
+          dir build\bin\Release
+          dir build\bin\Release\platforms
         shell: cmd
+
+      - name: Test Application Launch
+        run: |
+          echo "=== Testing application launch ==="
+          cd build\bin\Release
+          echo "Current directory:"
+          cd
+          echo "Files in directory:"
+          dir
+          echo "Attempting to launch application for 3 seconds..."
+          timeout 3 winsys-overlay.exe || echo "Application test completed (timeout expected)"
+        shell: cmd
+        continue-on-error: true
 
       - name: Optimize and Compress Release Files
         if: env.UPX_PATH != ''
@@ -71,14 +104,32 @@ jobs:
           "%UPX_PATH%" --best --lzma build/bin/Release/winsys-overlay.exe
           
           echo "Compressing native DLLs (forcing due to GUARD_CF)..."
-          for %%F in (build\bin\Release\Qt6*.dll) do "%UPX_PATH%" --best --lzma --force "%%F"
+          for %%F in (build\bin\Release\Qt6*.dll) do (
+            echo Compressing %%F
+            "%UPX_PATH%" --best --lzma --force "%%F"
+          )
           
           echo "Compressing platform plugins..."
-          if exist build\bin\Release\platforms\qwindows.dll "%UPX_PATH%" --best --lzma --force build\bin\Release\platforms\qwindows.dll
-          if exist build\bin\Release\platforms\qminimal.dll "%UPX_PATH%" --best --lzma --force build\bin\Release\platforms\qminimal.dll
+          if exist build\bin\Release\platforms\qwindows.dll (
+            echo Compressing qwindows.dll
+            "%UPX_PATH%" --best --lzma --force build\bin\Release\platforms\qwindows.dll
+          )
+          if exist build\bin\Release\platforms\qminimal.dll (
+            echo Compressing qminimal.dll
+            "%UPX_PATH%" --best --lzma --force build\bin\Release\platforms\qminimal.dll
+          )
 
           echo "Skipping .NET assemblies (TempReader.exe, LibreHardwareMonitorLib.dll) as they are not supported by UPX."
         shell: cmd
+
+      - name: Final Application Test
+        run: |
+          echo "=== Final application test after compression ==="
+          cd build\bin\Release
+          echo "Testing compressed application..."
+          timeout 3 winsys-overlay.exe || echo "Final test completed (timeout expected)"
+        shell: cmd
+        continue-on-error: true
 
       - name: Package Release Files
         id: package
