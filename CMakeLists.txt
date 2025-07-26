@@ -54,19 +54,15 @@ target_link_libraries(winsys-overlay PRIVATE
 
 # --- Deployment & Installation ---
 
-install(TARGETS winsys-overlay RUNTIME DESTINATION bin COMPONENT Application)
+# The DEPLOY_SOURCE_DIR contains the app, helper exe, and all dependencies
+# copied by the 'windeployqt' step in the GitHub workflow.
+set(DEPLOY_SOURCE_DIR "${CMAKE_BINARY_DIR}/bin/Release")
 
-install(CODE "
-    message(STATUS \"Running windeployqt...\")
-    execute_process(
-        COMMAND ${Qt6_windeployqt_EXECUTABLE} --release --no-translations --dir \"${CMAKE_INSTALL_PREFIX}/bin\" \"$<TARGET_FILE:winsys-overlay>\"
-    )
-" COMPONENT Application)
-
-install(FILES
-    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/TempReader.exe"
-    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/LibreHardwareMonitorLib.dll"
-    DESTINATION bin
+# Install the entire directory containing the executable and all dependencies.
+# This will create a 'bin' folder in the final installation directory.
+install(
+    DIRECTORY "${DEPLOY_SOURCE_DIR}/"
+    DESTINATION "bin"
     COMPONENT Application
 )
 
@@ -79,9 +75,7 @@ set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A simple system information overlay for W
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")
 set(CPACK_GENERATOR "NSIS")
 
-# Set a predictable installer filename without spaces
 set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-win64")
-
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 
 # NSIS specific settings
