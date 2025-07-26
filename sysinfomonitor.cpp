@@ -1,13 +1,22 @@
-
 #include "sysinfomonitor.h"
 #include <QDebug>
 #include <QCoreApplication>
 #include <QDir>
+#include <QSettings>
+#include <QDate>
 
 SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
 {
     m_tempReaderProcess = new QProcess(this);
     m_timer = new QTimer(this);
+
+    // Initialize daily data tracking
+    m_dailyDataBytes = 0;
+    m_lastResetDate = QDate::currentDate();
+    
+    // Initialize network tracking for speed calculation
+    m_lastNetworkBytes = {0, 0};
+    m_lastNetworkTime = QDateTime::currentMSecsSinceEpoch();
 
     connect(m_timer, &QTimer::timeout, this, &SysInfoMonitor::poll);
     connect(m_tempReaderProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &SysInfoMonitor::onTempReaderFinished);
@@ -18,20 +27,25 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
     });
 
     initializeLegacyCounters();
+    loadDailyDataUsage();
 }
 
 SysInfoMonitor::~SysInfoMonitor()
 {
     stop();
+    saveDailyDataUsage();
 }
 
 void SysInfoMonitor::start() {
-    m_timer->start(1000); // Poll every second
+    QSettings s;
+    int interval = s.value("behavior/updateInterval", 1000).toInt();
+    m_timer->start(interval);
 }
 
 void SysInfoMonitor::stop() {
     m_timer->stop();
     m_tempReaderProcess->kill();
+    saveDailyDataUsage();
 }
 
 void SysInfoMonitor::poll() {
@@ -55,10 +69,19 @@ void SysInfoMonitor::onTempReaderFinished(int exitCode, QProcess::ExitStatus exi
         // Parse the output: "CPU:XX.X,GPU:XX.X"
         QStringList parts = outputStr.split(',');
         if (parts.length() == 2) {
-            m_sysInfo.cpuTemp = parts[0].mid(4).toDouble();
-            m_sysInfo.gpuTemp = parts[1].mid(4).toDouble();
+            QString cpuTempStr = parts[0].mid(4); // Remove "CPU:"
+            QString gpuTempStr = parts[1].mid(4); // Remove "GPU:"
+            
+            bool cpuOk, gpuOk;
+            double cpuTemp = cpuTempStr.toDouble(&cpuOk);
+            double gpuTemp = gpuTempStr.toDouble(&gpuOk);
+            
+            m_sysInfo.cpuTemp = cpuOk ? cpuTemp : -1;
+            m_sysInfo.gpuTemp = gpuOk ? gpuTemp : -1;
         } else {
-            qWarning() << "Failed to parse TempReader output.";
+            qWarning() << "Failed to parse TempReader output:" << outputStr;
+            m_sysInfo.cpuTemp = -1;
+            m_sysInfo.gpuTemp = -1;
         }
     } else {
         qWarning() << "TempReader.exe failed or crashed. Exit code:" << exitCode << "Status:" << exitStatus;
@@ -71,9 +94,32 @@ void SysInfoMonitor::onTempReaderFinished(int exitCode, QProcess::ExitStatus exi
     emit statsUpdated(m_sysInfo);
 }
 
+void SysInfoMonitor::loadDailyDataUsage()
+{
+    QSettings s;
+    QDate savedDate = s.value("network/lastResetDate", QDate::currentDate()).toDate();
+    
+    // Reset if it's a new day
+    if (savedDate != QDate::currentDate()) {
+        m_dailyDataBytes = 0;
+        m_lastResetDate = QDate::currentDate();
+        saveDailyDataUsage();
+    } else {
+        m_dailyDataBytes = s.value("network/dailyDataBytes", 0).toLongLong();
+    }
+}
+
+void SysInfoMonitor::saveDailyDataUsage()
+{
+    QSettings s;
+    s.setValue("network/dailyDataBytes", m_dailyDataBytes);
+    s.setValue("network/lastResetDate", m_lastResetDate);
+}
+
 // --- Restored Legacy PDH Code ---
 
 void SysInfoMonitor::initializeLegacyCounters() {
+    // Initialize all queries and counters
     PdhOpenQuery(nullptr, 0, &m_cpuQuery);
     PdhAddEnglishCounter(m_cpuQuery, L"\\Processor(_Total)\\% Processor Time", 0, &m_cpuTotalCounter);
     PdhCollectQueryData(m_cpuQuery);
@@ -82,6 +128,7 @@ void SysInfoMonitor::initializeLegacyCounters() {
     PdhAddEnglishCounter(m_diskQuery, L"\\PhysicalDisk(_Total)\\% Disk Time", 0, &m_diskTotalCounter);
     PdhCollectQueryData(m_diskQuery);
 
+    // GPU counters
     PdhOpenQuery(nullptr, 0, &m_gpuQuery);
     const wchar_t* gpuCounterPath = L"\\GPU Engine(*)\\Utilization Percentage";
     DWORD gpuBufferSize = 0;
@@ -100,16 +147,22 @@ void SysInfoMonitor::initializeLegacyCounters() {
         PdhCollectQueryData(m_gpuQuery);
     }
 
+    // Network counters
     PdhOpenQuery(nullptr, 0, &m_networkQuery);
     const wchar_t* receivedPath = L"\\Network Interface(*)\\Bytes Received/sec";
     const wchar_t* sentPath = L"\\Network Interface(*)\\Bytes Sent/sec";
+    
     auto addCounters = [&](const wchar_t* path, QList<PDH_HCOUNTER>& list) {
         DWORD bufferSize = 0;
         if (PdhExpandWildCardPathW(nullptr, path, nullptr, &bufferSize, 0) == PDH_MORE_DATA) {
             QVector<wchar_t> pathBuffer(bufferSize);
             if (PdhExpandWildCardPathW(nullptr, path, pathBuffer.data(), &bufferSize, 0) == ERROR_SUCCESS) {
                 for (const wchar_t* p = pathBuffer.data(); *p != L'\0'; p += wcslen(p) + 1) {
-                    if (wcsstr(p, L"Loopback") == nullptr) {
+                    QString interfaceName = QString::fromWCharArray(p);
+                    // Skip loopback and other non-physical interfaces
+                    if (!interfaceName.contains("Loopback", Qt::CaseInsensitive) &&
+                        !interfaceName.contains("Teredo", Qt::CaseInsensitive) &&
+                        !interfaceName.contains("isatap", Qt::CaseInsensitive)) {
                         PDH_HCOUNTER counter;
                         if (PdhAddEnglishCounterW(m_networkQuery, p, 0, &counter) == ERROR_SUCCESS) {
                             list.append(counter);
@@ -119,8 +172,10 @@ void SysInfoMonitor::initializeLegacyCounters() {
             }
         }
     };
+    
     addCounters(receivedPath, m_networkBytesReceivedCounters);
     addCounters(sentPath, m_networkBytesSentCounters);
+    
     if (!m_networkBytesReceivedCounters.isEmpty() || !m_networkBytesSentCounters.isEmpty()) {
         PdhCollectQueryData(m_networkQuery);
     }
@@ -129,24 +184,36 @@ void SysInfoMonitor::initializeLegacyCounters() {
 void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
     PDH_FMT_COUNTERVALUE counterVal;
 
+    // CPU Load
     if (m_cpuQuery && PdhCollectQueryData(m_cpuQuery) == ERROR_SUCCESS &&
         PdhGetFormattedCounterValue(m_cpuTotalCounter, PDH_FMT_DOUBLE, nullptr, &counterVal) == ERROR_SUCCESS) {
         info.cpuLoad = counterVal.doubleValue;
+    } else {
+        info.cpuLoad = 0.0;
     }
 
+    // Memory Usage
     MEMORYSTATUSEX memInfo;
     memInfo.dwLength = sizeof(MEMORYSTATUSEX);
     if (GlobalMemoryStatusEx(&memInfo)) {
         info.memUsage = memInfo.dwMemoryLoad;
         info.totalRamMB = memInfo.ullTotalPhys / (1024 * 1024);
         info.availRamMB = memInfo.ullAvailPhys / (1024 * 1024);
+    } else {
+        info.memUsage = 0;
+        info.totalRamMB = 0;
+        info.availRamMB = 0;
     }
 
+    // Disk Load
     if (m_diskQuery && PdhCollectQueryData(m_diskQuery) == ERROR_SUCCESS &&
         PdhGetFormattedCounterValue(m_diskTotalCounter, PDH_FMT_DOUBLE, nullptr, &counterVal) == ERROR_SUCCESS) {
         info.diskLoad = counterVal.doubleValue;
+    } else {
+        info.diskLoad = 0.0;
     }
 
+    // GPU Load
     if (m_gpuQuery && !m_gpuCounters.isEmpty() && PdhCollectQueryData(m_gpuQuery) == ERROR_SUCCESS) {
         double maxGpuLoad = 0.0;
         for (PDH_HCOUNTER gpuCounter : m_gpuCounters) {
@@ -157,8 +224,11 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
             }
         }
         info.gpuLoad = maxGpuLoad;
+    } else {
+        info.gpuLoad = 0.0;
     }
 
+    // Network Speed and Daily Usage
     if (m_networkQuery && PdhCollectQueryData(m_networkQuery) == ERROR_SUCCESS) {
         auto getCounterValue = [&](QList<PDH_HCOUNTER>& counters) {
             double total = 0.0;
@@ -169,16 +239,56 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
             }
             return total;
         };
-        info.networkDownloadSpeed = getCounterValue(m_networkBytesReceivedCounters) / (1024.0 * 1024.0);
-        info.networkUploadSpeed = getCounterValue(m_networkBytesSentCounters) / (1024.0 * 1024.0);
+        
+        double currentDownBytes = getCounterValue(m_networkBytesReceivedCounters);
+        double currentUpBytes = getCounterValue(m_networkBytesSentCounters);
+        qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
+        
+        // Calculate speeds (bytes per second to MB per second)
+        if (m_lastNetworkTime > 0) {
+            double timeDiffSec = (currentTime - m_lastNetworkTime) / 1000.0;
+            if (timeDiffSec > 0) {
+                double downSpeedBps = (currentDownBytes - m_lastNetworkBytes.first) / timeDiffSec;
+                double upSpeedBps = (currentUpBytes - m_lastNetworkBytes.second) / timeDiffSec;
+                
+                info.networkDownloadSpeed = qMax(0.0, downSpeedBps / (1024.0 * 1024.0));
+                info.networkUploadSpeed = qMax(0.0, upSpeedBps / (1024.0 * 1024.0));
+                
+                // Update daily data usage
+                m_dailyDataBytes += qMax(0.0, downSpeedBps + upSpeedBps) * timeDiffSec;
+            }
+        }
+        
+        m_lastNetworkBytes = {currentDownBytes, currentUpBytes};
+        m_lastNetworkTime = currentTime;
+        
+        info.dailyDataUsageMB = m_dailyDataBytes / (1024.0 * 1024.0);
+    } else {
+        info.networkDownloadSpeed = 0.0;
+        info.networkUploadSpeed = 0.0;
+        info.dailyDataUsageMB = m_dailyDataBytes / (1024.0 * 1024.0);
     }
 
+    // Process Count
     DWORD processIds[1024];
     DWORD bytesNeeded;
     if (EnumProcesses(processIds, sizeof(processIds), &bytesNeeded)) {
         info.activeProcesses = bytesNeeded / sizeof(DWORD);
+    } else {
+        info.activeProcesses = 0;
     }
 
+    // System Uptime
     ULONGLONG uptimeMs = GetTickCount64();
-    info.systemUptime = uptimeMs / (1000.0 * 60.0 * 60.0);
+    info.systemUptime = uptimeMs / (1000.0 * 60.0 * 60.0); // Convert to hours
+
+    // FPS - placeholder (would need more complex implementation)
+    info.fps = 0.0; // Not implemented yet
+    
+    // Check if we need to reset daily data (new day)
+    if (QDate::currentDate() != m_lastResetDate) {
+        m_dailyDataBytes = 0;
+        m_lastResetDate = QDate::currentDate();
+        saveDailyDataUsage();
+    }
 }
