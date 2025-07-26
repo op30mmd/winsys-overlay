@@ -3,10 +3,9 @@
 
 #include <QObject>
 #include <QTimer>
+#include <QProcess>
 #include <QString>
 #include <QDateTime>
-#include <QThread>
-#include "HardwareMonitor.h"
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -18,23 +17,20 @@
 
 struct SysInfo {
     double cpuLoad;
-    DWORD memUsage; // Memory usage percentage
+    DWORD memUsage;
     qint64 totalRamMB;
     qint64 availRamMB;
     double diskLoad;
     double gpuLoad;
-    
-    // New metrics
-    double fps;                    // Current FPS (estimated from active window)
-    double networkDownloadSpeed;   // Current download speed in MB/s
-    double networkUploadSpeed;     // Current upload speed in MB/s
-    qint64 dailyDataUsageMB;      // Daily internet usage in MB
-    double cpuTemp;               // CPU temperature in Celsius
-    double gpuTemp;               // GPU temperature in Celsius
-    int activeProcesses;          // Number of active processes
-    double systemUptime;          // System uptime in hours
+    double fps;
+    double networkDownloadSpeed;
+    double networkUploadSpeed;
+    qint64 dailyDataUsageMB;
+    double cpuTemp;
+    double gpuTemp;
+    int activeProcesses;
+    double systemUptime;
 };
-
 
 class SysInfoMonitor : public QObject
 {
@@ -51,14 +47,27 @@ signals:
 
 private slots:
     void poll();
+    void onTempReaderFinished(int exitCode, QProcess::ExitStatus exitStatus);
 
 private:
-    void initialize();
+    void initializeLegacyCounters();
+    void updateLegacyStats(SysInfo& info);
 
-    QThread* m_thread;
     QTimer* m_timer;
-    HardwareMonitor* m_hardwareMonitor;
+    QProcess* m_tempReaderProcess;
     SysInfo m_sysInfo;
+
+#ifdef Q_OS_WIN
+    PDH_HQUERY m_cpuQuery;
+    PDH_HCOUNTER m_cpuTotalCounter;
+    PDH_HQUERY m_diskQuery;
+    PDH_HCOUNTER m_diskTotalCounter;
+    PDH_HQUERY m_gpuQuery;
+    QList<PDH_HCOUNTER> m_gpuCounters;
+    PDH_HQUERY m_networkQuery;
+    QList<PDH_HCOUNTER> m_networkBytesReceivedCounters;
+    QList<PDH_HCOUNTER> m_networkBytesSentCounters;
+#endif
 };
 
 #endif // SYSINFOMONITOR_H
