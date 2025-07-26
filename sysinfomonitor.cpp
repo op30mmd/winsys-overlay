@@ -117,38 +117,45 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
 void SysInfoMonitor::initializeNetworkCounters()
 {
     if (PdhOpenQuery(nullptr, 0, &m_networkQuery) == ERROR_SUCCESS) {
-        // Try to add network interface counters
-        const wchar_t* networkPaths[] = {
-            L"\\Network Interface(*)\\Bytes Received/sec",
-            L"\\Network Interface(*)\\Bytes Sent/sec"
-        };
-        
-        for (const wchar_t* path : networkPaths) {
+        const wchar_t* receivedPath = L"\\Network Interface(*)\\Bytes Received/sec";
+        const wchar_t* sentPath = L"\\Network Interface(*)\\Bytes Sent/sec";
+
+        auto addCounters = [&](const wchar_t* path, QList<PDH_HCOUNTER>& counterList) {
             DWORD bufferSize = 0;
             if (PdhExpandWildCardPathW(nullptr, path, nullptr, &bufferSize, 0) == PDH_MORE_DATA) {
                 QVector<wchar_t> pathBuffer(bufferSize);
                 if (PdhExpandWildCardPathW(nullptr, path, pathBuffer.data(), &bufferSize, 0) == ERROR_SUCCESS) {
                     for (const wchar_t* p = pathBuffer.data(); *p != L'\0'; p += wcslen(p) + 1) {
                         QString counterName = QString::fromWCharArray(p);
-                        // Skip loopback and isatap interfaces
-                        if (counterName.contains("Loopback") || counterName.contains("isatap")) {
-                            continue;
-                        }
-                        
-                        PDH_HCOUNTER networkCounter;
-                        if (PdhAddEnglishCounterW(m_networkQuery, p, 0, &networkCounter) == ERROR_SUCCESS) {
-                            if (wcsstr(path, L"Received")) {
-                                m_networkBytesReceivedCounter = networkCounter;
-                            } else {
-                                m_networkBytesSentCounter = networkCounter;
-                            }
-                            break; // Use first valid interface
+                        if (counterName.contains("Loopback") || counterName.contains("isatap")) continue;
+                        PDH_HCOUNTER counter;
+                        if (PdhAddEnglishCounterW(m_networkQuery, p, 0, &counter) == ERROR_SUCCESS) {
+                            counterList.append(counter);
                         }
                     }
                 }
             }
+        };
+
+        addCounters(receivedPath, m_networkBytesReceivedCounters);
+        addCounters(sentPath, m_networkBytesSentCounters);
+
+        if (!m_networkBytesReceivedCounters.isEmpty() || !m_networkBytesSentCounters.isEmpty()) {
+            PdhCollectQueryData(m_networkQuery);
         }
-        PdhCollectQueryData(m_networkQuery);
+    }
+
+    MIB_IFTABLE* ifTable = nullptr;
+    DWORD bufLen = 0;
+    if (GetIfTable(ifTable, &bufLen, FALSE) == ERROR_INSUFFICIENT_BUFFER) {
+        ifTable = (MIB_IFTABLE*)new char[bufLen];
+        if (GetIfTable(ifTable, &bufLen, FALSE) == NO_ERROR) {
+            for (DWORD i = 0; i < ifTable->dwNumEntries; ++i) {
+                m_initialBytesReceived += ifTable->table[i].dwInOctets;
+                m_initialBytesSent += ifTable->table[i].dwOutOctets;
+            }
+        }
+        delete[] ifTable;
     }
 }
 
@@ -280,45 +287,39 @@ void SysInfoMonitor::updateNetworkStats(SysInfo& info)
 {
     if (!m_networkQuery) return;
 
-    QDateTime now = QDateTime::currentDateTime();
-    qint64 currentDay = getCurrentDayKey();
-
-    if (currentDay != m_currentDayKey) {
-        saveDailyUsage();
-        m_currentDayKey = currentDay;
-        m_dailyBytesReceived = 0;
-        m_dailyBytesSent = 0;
-    }
-
     if (PdhCollectQueryData(m_networkQuery) == ERROR_SUCCESS) {
-        PDH_FMT_COUNTERVALUE downloadVal, uploadVal;
+        auto getCounterValue = [&](QList<PDH_HCOUNTER>& counters) {
+            double total = 0.0;
+            PDH_FMT_COUNTERVALUE value;
+            for (PDH_HCOUNTER counter : counters) {
+                if (PdhGetFormattedCounterValue(counter, PDH_FMT_DOUBLE, nullptr, &value) == ERROR_SUCCESS) {
+                    total += value.doubleValue;
+                }
+            }
+            return total;
+        };
 
-        if (PdhGetFormattedCounterValue(m_networkBytesReceivedCounter, PDH_FMT_LARGE, nullptr, &downloadVal) == ERROR_SUCCESS) {
-            info.networkDownloadSpeed = downloadVal.largeValue / (1024.0 * 1024.0);
-        }
-
-        if (PdhGetFormattedCounterValue(m_networkBytesSentCounter, PDH_FMT_LARGE, nullptr, &uploadVal) == ERROR_SUCCESS) {
-            info.networkUploadSpeed = uploadVal.largeValue / (1024.0 * 1024.0);
-        }
+        info.networkDownloadSpeed = getCounterValue(m_networkBytesReceivedCounters) / (1024.0 * 1024.0);
+        info.networkUploadSpeed = getCounterValue(m_networkBytesSentCounters) / (1024.0 * 1024.0);
     }
 
+    qint64 currentBytesReceived = 0;
+    qint64 currentBytesSent = 0;
     MIB_IFTABLE* ifTable = nullptr;
     DWORD bufLen = 0;
     if (GetIfTable(ifTable, &bufLen, FALSE) == ERROR_INSUFFICIENT_BUFFER) {
         ifTable = (MIB_IFTABLE*)new char[bufLen];
         if (GetIfTable(ifTable, &bufLen, FALSE) == NO_ERROR) {
-            qint64 totalReceived = 0;
-            qint64 totalSent = 0;
             for (DWORD i = 0; i < ifTable->dwNumEntries; ++i) {
-                totalReceived += ifTable->table[i].dwInOctets;
-                totalSent += ifTable->table[i].dwOutOctets;
+                currentBytesReceived += ifTable->table[i].dwInOctets;
+                currentBytesSent += ifTable->table[i].dwOutOctets;
             }
-            m_dailyBytesReceived = totalReceived;
-            m_dailyBytesSent = totalSent;
         }
         delete[] ifTable;
     }
 
+    m_dailyBytesReceived = currentBytesReceived - m_initialBytesReceived;
+    m_dailyBytesSent = currentBytesSent - m_initialBytesSent;
     info.dailyDataUsageMB = (m_dailyBytesReceived + m_dailyBytesSent) / (1024 * 1024);
 }
 
@@ -349,67 +350,55 @@ void SysInfoMonitor::updateFPS(SysInfo& info)
 
 void SysInfoMonitor::updateTemperatures(SysInfo& info)
 {
+    info.cpuTemp = 0.0;
+    info.gpuTemp = 0.0;
+
     IWbemLocator* pLoc = nullptr;
     IWbemServices* pSvc = nullptr;
     IEnumWbemClassObject* pEnumerator = nullptr;
 
-    if (SUCCEEDED(CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&pLoc))) {
-        if (SUCCEEDED(pLoc->ConnectServer(_bstr_t(L"ROOT\\WMI"), nullptr, nullptr, 0, 0, 0, 0, &pSvc))) {
-            if (SUCCEEDED(pSvc->ExecQuery(_bstr_t(L"WQL"), _bstr_t(L"SELECT * FROM MSAcpi_ThermalZoneTemperature"), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &pEnumerator))) {
-                IWbemClassObject* pObj = nullptr;
-                ULONG uReturn = 0;
-                double maxCpuTemp = 0.0;
-                while (pEnumerator && SUCCEEDED(pEnumerator->Next(WBEM_INFINITE, 1, &pObj, &uReturn)) && uReturn != 0) {
-                    VARIANT vtProp;
-                    if (SUCCEEDED(pObj->Get(L"CurrentTemperature", 0, &vtProp, 0, 0))) {
-                        double tempKelvin = vtProp.uintVal;
-                        double tempCelsius = (tempKelvin / 10.0) - 273.15;
-                        if (tempCelsius > maxCpuTemp) {
-                            maxCpuTemp = tempCelsius;
-                        }
-                        VariantClear(&vtProp);
-                    }
-                    pObj->Release();
-                }
-                info.cpuTemp = maxCpuTemp;
-            }
-        }
+    HRESULT hres = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&pLoc);
+    if (FAILED(hres)) return;
+
+    hres = pLoc->ConnectServer(_bstr_t(L"ROOT\\WMI"), NULL, NULL, 0, NULL, 0, 0, &pSvc);
+    if (FAILED(hres)) {
+        pLoc->Release();
+        return;
     }
 
-    if (pEnumerator) pEnumerator->Release();
-    if (pSvc) pSvc->Release();
-    if (pLoc) pLoc->Release();
-
-    pLoc = nullptr;
-    pSvc = nullptr;
-    pEnumerator = nullptr;
-
-    if (SUCCEEDED(CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&pLoc))) {
-        if (SUCCEEDED(pLoc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), nullptr, nullptr, 0, 0, 0, 0, &pSvc))) {
-            if (SUCCEEDED(pSvc->ExecQuery(_bstr_t(L"WQL"), _bstr_t(L"SELECT * FROM Win32_VideoController"), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &pEnumerator))) {
-                IWbemClassObject* pObj = nullptr;
-                ULONG uReturn = 0;
-                double maxGpuTemp = 0.0;
-                while (pEnumerator && SUCCEEDED(pEnumerator->Next(WBEM_INFINITE, 1, &pObj, &uReturn)) && uReturn != 0) {
-                    VARIANT vtProp;
-                    if (SUCCEEDED(pObj->Get(L"AdapterRAM", 0, &vtProp, 0, 0))) {
-                        double temp = vtProp.uintVal;
-                        if (temp > maxGpuTemp) {
-                            maxGpuTemp = temp;
-                        }
-                        VariantClear(&vtProp);
-                    }
-                    pObj->Release();
-                }
-                info.gpuTemp = maxGpuTemp;
-            }
-        }
+    hres = pSvc->ExecQuery(bstr_t("WQL"), bstr_t("SELECT * FROM MSAcpi_ThermalZoneTemperature"), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
+    if (FAILED(hres)) {
+        pSvc->Release();
+        pLoc->Release();
+        return;
     }
 
-    if (pEnumerator) pEnumerator->Release();
-    if (pSvc) pSvc->Release();
-    if (pLoc) pLoc->Release();
+    IWbemClassObject* pclsObj = NULL;
+    ULONG uReturn = 0;
+    double maxCpuTemp = 0.0;
+    while (pEnumerator)
+    {
+        HRESULT hr = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+        if (0 == uReturn) break;
+        VARIANT vtProp;
+        hr = pclsObj->Get(L"CurrentTemperature", 0, &vtProp, 0, 0);
+        double tempKelvin = vtProp.uintVal;
+        double tempCelsius = (tempKelvin / 10.0) - 273.15;
+        if (tempCelsius > maxCpuTemp) maxCpuTemp = tempCelsius;
+        VariantClear(&vtProp);
+        pclsObj->Release();
+    }
+    info.cpuTemp = maxCpuTemp;
+
+    pSvc->Release();
+    pLoc->Release();
+    pEnumerator->Release();
+
+    // GPU Temp (NVAPI/AMD ADL)
+    // This part is complex and requires vendor-specific SDKs.
+    // For now, we'll leave it as a placeholder.
 }
+
 
 void SysInfoMonitor::updateSystemInfo(SysInfo& info)
 {

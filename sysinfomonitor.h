@@ -84,13 +84,17 @@ private:
     
     // Network counters
     PDH_HQUERY m_networkQuery;
-    PDH_HCOUNTER m_networkBytesReceivedCounter;
-    PDH_HCOUNTER m_networkBytesSentCounter;
+    QList<PDH_HCOUNTER> m_networkBytesReceivedCounters;
+    QList<PDH_HCOUNTER> m_networkBytesSentCounters;
     
     // Temperature counters (if available)
     PDH_HQUERY m_tempQuery;
     QList<PDH_HCOUNTER> m_cpuTempCounters;
     QList<PDH_HCOUNTER> m_gpuTempCounters;
+
+    // Daily data usage
+    qint64 m_initialBytesReceived;
+    qint64 m_initialBytesSent;
 #endif
 };
 
