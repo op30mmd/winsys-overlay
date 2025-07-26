@@ -5,8 +5,16 @@
 #include <QStandardPaths>
 #include <QDir>
 
+#include <WbemIdl.h>
+#include <comdef.h>
+
+#pragma comment(lib, "wbemuuid.lib")
+
 SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
 {
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    CoInitializeSecurity(nullptr, -1, nullptr, nullptr, RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE, nullptr, EOAC_NONE, nullptr);
+
     m_cpuQuery = nullptr;
     m_diskQuery = nullptr;
     m_gpuQuery = nullptr;
@@ -274,8 +282,7 @@ void SysInfoMonitor::updateNetworkStats(SysInfo& info)
 
     QDateTime now = QDateTime::currentDateTime();
     qint64 currentDay = getCurrentDayKey();
-    
-    // Check if it's a new day
+
     if (currentDay != m_currentDayKey) {
         saveDailyUsage();
         m_currentDayKey = currentDay;
@@ -284,32 +291,32 @@ void SysInfoMonitor::updateNetworkStats(SysInfo& info)
     }
 
     if (PdhCollectQueryData(m_networkQuery) == ERROR_SUCCESS) {
-        PDH_FMT_COUNTERVALUE counterVal;
-        qint64 currentBytesReceived = 0;
-        qint64 currentBytesSent = 0;
+        PDH_FMT_COUNTERVALUE downloadVal, uploadVal;
 
-        if (PdhGetFormattedCounterValue(m_networkBytesReceivedCounter, PDH_FMT_LARGE, nullptr, &counterVal) == ERROR_SUCCESS) {
-            currentBytesReceived = counterVal.largeValue;
-        }
-        if (PdhGetFormattedCounterValue(m_networkBytesSentCounter, PDH_FMT_LARGE, nullptr, &counterVal) == ERROR_SUCCESS) {
-            currentBytesSent = counterVal.largeValue;
+        if (PdhGetFormattedCounterValue(m_networkBytesReceivedCounter, PDH_FMT_LARGE, nullptr, &downloadVal) == ERROR_SUCCESS) {
+            info.networkDownloadSpeed = downloadVal.largeValue / (1024.0 * 1024.0);
         }
 
-        // Calculate speeds (bytes per second to MB/s)
-        qint64 timeDiffMs = m_lastNetworkUpdate.msecsTo(now);
-        if (timeDiffMs > 0 && m_lastBytesReceived > 0) {
-            double timeDiffSec = timeDiffMs / 1000.0;
-            info.networkDownloadSpeed = (currentBytesReceived - m_lastBytesReceived) / (1024.0 * 1024.0 * timeDiffSec);
-            info.networkUploadSpeed = (currentBytesSent - m_lastBytesSent) / (1024.0 * 1024.0 * timeDiffSec);
-            
-            // Accumulate daily usage
-            m_dailyBytesReceived += (currentBytesReceived - m_lastBytesReceived);
-            m_dailyBytesSent += (currentBytesSent - m_lastBytesSent);
+        if (PdhGetFormattedCounterValue(m_networkBytesSentCounter, PDH_FMT_LARGE, nullptr, &uploadVal) == ERROR_SUCCESS) {
+            info.networkUploadSpeed = uploadVal.largeValue / (1024.0 * 1024.0);
         }
+    }
 
-        m_lastBytesReceived = currentBytesReceived;
-        m_lastBytesSent = currentBytesSent;
-        m_lastNetworkUpdate = now;
+    MIB_IFTABLE* ifTable = nullptr;
+    DWORD bufLen = 0;
+    if (GetIfTable(ifTable, &bufLen, FALSE) == ERROR_INSUFFICIENT_BUFFER) {
+        ifTable = (MIB_IFTABLE*)new char[bufLen];
+        if (GetIfTable(ifTable, &bufLen, FALSE) == NO_ERROR) {
+            qint64 totalReceived = 0;
+            qint64 totalSent = 0;
+            for (DWORD i = 0; i < ifTable->dwNumEntries; ++i) {
+                totalReceived += ifTable->table[i].dwInOctets;
+                totalSent += ifTable->table[i].dwOutOctets;
+            }
+            m_dailyBytesReceived = totalReceived;
+            m_dailyBytesSent = totalSent;
+        }
+        delete[] ifTable;
     }
 
     info.dailyDataUsageMB = (m_dailyBytesReceived + m_dailyBytesSent) / (1024 * 1024);
@@ -342,29 +349,66 @@ void SysInfoMonitor::updateFPS(SysInfo& info)
 
 void SysInfoMonitor::updateTemperatures(SysInfo& info)
 {
-    if (!m_tempQuery || m_cpuTempCounters.isEmpty()) {
-        info.cpuTemp = 0.0;
-        info.gpuTemp = 0.0;
-        return;
-    }
+    IWbemLocator* pLoc = nullptr;
+    IWbemServices* pSvc = nullptr;
+    IEnumWbemClassObject* pEnumerator = nullptr;
 
-    if (PdhCollectQueryData(m_tempQuery) == ERROR_SUCCESS) {
-        PDH_FMT_COUNTERVALUE counterVal;
-        double maxCpuTemp = 0.0;
-        
-        for (PDH_HCOUNTER tempCounter : m_cpuTempCounters) {
-            if (PdhGetFormattedCounterValue(tempCounter, PDH_FMT_DOUBLE, nullptr, &counterVal) == ERROR_SUCCESS) {
-                // Temperature is typically in Kelvin * 10, convert to Celsius
-                double tempCelsius = (counterVal.doubleValue / 10.0) - 273.15;
-                if (tempCelsius > maxCpuTemp && tempCelsius < 150) { // Sanity check
-                    maxCpuTemp = tempCelsius;
+    if (SUCCEEDED(CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&pLoc))) {
+        if (SUCCEEDED(pLoc->ConnectServer(_bstr_t(L"ROOT\\WMI"), nullptr, nullptr, 0, 0, 0, 0, &pSvc))) {
+            if (SUCCEEDED(pSvc->ExecQuery(_bstr_t(L"WQL"), _bstr_t(L"SELECT * FROM MSAcpi_ThermalZoneTemperature"), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &pEnumerator))) {
+                IWbemClassObject* pObj = nullptr;
+                ULONG uReturn = 0;
+                double maxCpuTemp = 0.0;
+                while (pEnumerator && SUCCEEDED(pEnumerator->Next(WBEM_INFINITE, 1, &pObj, &uReturn)) && uReturn != 0) {
+                    VARIANT vtProp;
+                    if (SUCCEEDED(pObj->Get(L"CurrentTemperature", 0, &vtProp, 0, 0))) {
+                        double tempKelvin = vtProp.uintVal;
+                        double tempCelsius = (tempKelvin / 10.0) - 273.15;
+                        if (tempCelsius > maxCpuTemp) {
+                            maxCpuTemp = tempCelsius;
+                        }
+                        VariantClear(&vtProp);
+                    }
+                    pObj->Release();
                 }
+                info.cpuTemp = maxCpuTemp;
             }
         }
-        
-        info.cpuTemp = maxCpuTemp;
-        info.gpuTemp = 0.0; // GPU temp requires different approach, often vendor-specific
     }
+
+    if (pEnumerator) pEnumerator->Release();
+    if (pSvc) pSvc->Release();
+    if (pLoc) pLoc->Release();
+
+    pLoc = nullptr;
+    pSvc = nullptr;
+    pEnumerator = nullptr;
+
+    if (SUCCEEDED(CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&pLoc))) {
+        if (SUCCEEDED(pLoc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), nullptr, nullptr, 0, 0, 0, 0, &pSvc))) {
+            if (SUCCEEDED(pSvc->ExecQuery(_bstr_t(L"WQL"), _bstr_t(L"SELECT * FROM Win32_VideoController"), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, nullptr, &pEnumerator))) {
+                IWbemClassObject* pObj = nullptr;
+                ULONG uReturn = 0;
+                double maxGpuTemp = 0.0;
+                while (pEnumerator && SUCCEEDED(pEnumerator->Next(WBEM_INFINITE, 1, &pObj, &uReturn)) && uReturn != 0) {
+                    VARIANT vtProp;
+                    if (SUCCEEDED(pObj->Get(L"AdapterRAM", 0, &vtProp, 0, 0))) {
+                        double temp = vtProp.uintVal;
+                        if (temp > maxGpuTemp) {
+                            maxGpuTemp = temp;
+                        }
+                        VariantClear(&vtProp);
+                    }
+                    pObj->Release();
+                }
+                info.gpuTemp = maxGpuTemp;
+            }
+        }
+    }
+
+    if (pEnumerator) pEnumerator->Release();
+    if (pSvc) pSvc->Release();
+    if (pLoc) pLoc->Release();
 }
 
 void SysInfoMonitor::updateSystemInfo(SysInfo& info)
