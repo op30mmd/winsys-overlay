@@ -58,12 +58,12 @@ jobs:
           echo "Running CPack to create installer..."
           cpack -C Release
           echo "CPack finished. Searching for installer file..."
-          for %%F in (*.exe) do (
+          for %%F in (WinSysOverlay-*.exe) do (
             echo "Found installer: %%F"
             echo "INSTALLER_NAME=%%F" >> %GITHUB_OUTPUT%
             goto :found
           )
-          echo "ERROR: CPack installer *.exe not found in build directory!"
+          echo "ERROR: CPack installer WinSysOverlay-*.exe not found in build directory!"
           exit /b 1
           :found
         shell: cmd
