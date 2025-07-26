@@ -436,26 +436,22 @@ void OverlayWidget::updateStats(const SysInfo &info)
     m_gpuLabel->setText(QString("GPU: %1%").arg(info.gpuLoad, 0, 'f', 1));
 
     // New metrics
-    if (info.fps > 0) {
-        m_fpsLabel->setText(QString("FPS: %1").arg(info.fps, 0, 'f', 0));
-    } else {
-        m_fpsLabel->setText("FPS: --");
-    }
+    m_fpsLabel->setText("FPS: N/A");
     
     m_netDownLabel->setText(QString("↓: %1 MB/s").arg(info.networkDownloadSpeed, 0, 'f', 2));
     m_netUpLabel->setText(QString("↑: %1 MB/s").arg(info.networkUploadSpeed, 0, 'f', 2));
     m_dailyDataLabel->setText(QString("Daily: %1 MB").arg(info.dailyDataUsageMB));
     
-    if (info.cpuTemp > 0) {
+    if (info.cpuTemp >= 0) {
         m_cpuTempLabel->setText(QString("CPU°: %1°C").arg(info.cpuTemp, 0, 'f', 1));
     } else {
-        m_cpuTempLabel->setText("CPU°: --");
+        m_cpuTempLabel->setText("CPU°: N/A");
     }
     
-    if (info.gpuTemp > 0) {
+    if (info.gpuTemp >= 0) {
         m_gpuTempLabel->setText(QString("GPU°: %1°C").arg(info.gpuTemp, 0, 'f', 1));
     } else {
-        m_gpuTempLabel->setText("GPU°: --");
+        m_gpuTempLabel->setText("GPU°: N/A");
     }
     
     m_processesLabel->setText(QString("Proc: %1").arg(info.activeProcesses));

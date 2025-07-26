@@ -318,50 +318,64 @@ void SysInfoMonitor::updateFPS(SysInfo& info)
 
 void SysInfoMonitor::updateTemperatures(SysInfo& info)
 {
-    info.cpuTemp = 0.0;
-    info.gpuTemp = 0.0;
+    info.cpuTemp = -1.0; // Default to N/A
+    info.gpuTemp = -1.0; // Default to N/A
 
     IWbemLocator* pLoc = nullptr;
     IWbemServices* pSvc = nullptr;
     IEnumWbemClassObject* pEnumerator = nullptr;
+    HRESULT hres;
 
-    HRESULT hres = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&pLoc);
-    if (FAILED(hres)) return;
+    hres = CoCreateInstance(CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER, IID_IWbemLocator, (LPVOID*)&pLoc);
+    if (FAILED(hres)) {
+        qWarning("Failed to create WbemLocator instance.");
+        return;
+    }
 
-    hres = pLoc->ConnectServer(_bstr_t(L"ROOT\\WMI"), NULL, NULL, 0, NULL, 0, 0, &pSvc);
+    hres = pLoc->ConnectServer(_bstr_t(L"ROOT\WMI"), NULL, NULL, 0, NULL, 0, 0, &pSvc);
     if (FAILED(hres)) {
         pLoc->Release();
+        qWarning("Could not connect to WMI namespace.");
         return;
     }
 
     hres = pSvc->ExecQuery(bstr_t("WQL"), bstr_t("SELECT * FROM MSAcpi_ThermalZoneTemperature"), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
     if (SUCCEEDED(hres)) {
-        IWbemClassObject* pclsObj = NULL;
+        IWbemClassObject* pclsObj = nullptr;
         ULONG uReturn = 0;
         double maxCpuTemp = 0.0;
-        while (pEnumerator)
-        {
+        bool tempFound = false;
+
+        while (pEnumerator) {
             HRESULT hr = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
-            if (0 == uReturn) break;
+            if (uReturn == 0) break;
+            
             VARIANT vtProp;
             hr = pclsObj->Get(L"CurrentTemperature", 0, &vtProp, 0, 0);
-            double tempKelvin = vtProp.uintVal;
-            double tempCelsius = (tempKelvin / 10.0) - 273.15;
-            if (tempCelsius > maxCpuTemp) maxCpuTemp = tempCelsius;
-            VariantClear(&vtProp);
+            if (SUCCEEDED(hr)) {
+                double tempKelvin = vtProp.uintVal;
+                double tempCelsius = (tempKelvin / 10.0) - 273.15;
+                if (tempCelsius > maxCpuTemp) {
+                    maxCpuTemp = tempCelsius;
+                    tempFound = true;
+                }
+                VariantClear(&vtProp);
+            }
             pclsObj->Release();
         }
-        info.cpuTemp = maxCpuTemp;
+        if (tempFound) {
+            info.cpuTemp = maxCpuTemp;
+        }
         pEnumerator->Release();
+    } else {
+        qWarning("WMI query for MSAcpi_ThermalZoneTemperature failed.");
     }
 
     pSvc->Release();
     pLoc->Release();
 
-    // GPU Temp (NVAPI/AMD ADL)
-    // This part is complex and requires vendor-specific SDKs.
-    // For now, we'll display N/A.
-    info.gpuTemp = -1.0; // Use a special value to indicate N/A
+    // GPU temperature reading is highly vendor-specific and requires dedicated SDKs (NVAPI, ADL).
+    // This is a complex implementation, so we will leave it as N/A for now.
 }
 
 
