@@ -34,21 +34,9 @@ jobs:
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: powershell
 
-      - name: Setup NSIS Manually from ZIP
-        run: |
-          $nsis_zip_url = "https://downloads.sourceforge.net/project/nsis/NSIS%203/3.09/nsis-3.09.zip"
-          $nsis_zip_file = "nsis.zip"
-          $nsis_extract_path = "${{ runner.temp }}\nsis"
-
-          echo "Downloading NSIS ZIP from $nsis_zip_url..."
-          Invoke-WebRequest -Uri $nsis_zip_url -OutFile $nsis_zip_file
-
-          echo "Extracting NSIS to $nsis_extract_path..."
-          Expand-Archive -Path $nsis_zip_file -DestinationPath $nsis_extract_path
-
-          echo "Adding NSIS directory to PATH..."
-          echo $nsis_extract_path >> $env:GITHUB_PATH
-        shell: powershell
+      - name: Install NSIS via Chocolatey
+        run: choco install nsis -y
+        shell: cmd
 
       - name: Configure CMake
         run: |
