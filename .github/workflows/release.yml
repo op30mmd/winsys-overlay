@@ -49,6 +49,14 @@ jobs:
           call "%VCVARS_PATH%"
           cmake --build build --config Release
         shell: cmd
+      
+      - name: Deploy Qt Dependencies
+        if: env.QT_DIR != ''
+        run: |
+          call "%VCVARS_PATH%"
+          echo "Deploying Qt dependencies to build/bin/Release..."
+          "%QT_DIR%\bin\windeployqt.exe" --release --no-translations build\bin\Release
+        shell: cmd
 
       - name: Package with CPack
         id: package_installer
