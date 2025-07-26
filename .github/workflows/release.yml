@@ -21,8 +21,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      
-
       - name: Generate Version Number
         id: get_version
         run: |
@@ -49,7 +47,17 @@ jobs:
 
       - name: Deploy Qt Dependencies
         run: |
-          %QT_DIR%\bin\windeployqt.exe --release --no-translations --no-opengl-sw --no-system-d3d-compiler build/bin/Release/winsys-overlay.exe
+          echo "Deploying Qt dependencies..."
+          %QT_DIR%\bin\windeployqt.exe --release --no-translations build/bin/Release/winsys-overlay.exe
+          echo "Verifying platform plugin deployment..."
+          if exist build\bin\Release\platforms\qwindows.dll (
+            echo "✓ Platform plugin qwindows.dll found"
+          ) else (
+            echo "✗ Platform plugin qwindows.dll missing - manually copying..."
+            mkdir build\bin\Release\platforms
+            copy "%QT_DIR%\plugins\platforms\qwindows.dll" build\bin\Release\platforms\
+            copy "%QT_DIR%\plugins\platforms\qminimal.dll" build\bin\Release\platforms\
+          )
         shell: cmd
 
       - name: Optimize and Compress Release Files
@@ -64,7 +72,10 @@ jobs:
           
           echo "Compressing native DLLs (forcing due to GUARD_CF)..."
           for %%F in (build\bin\Release\Qt6*.dll) do "%UPX_PATH%" --best --lzma --force "%%F"
+          
+          echo "Compressing platform plugins..."
           if exist build\bin\Release\platforms\qwindows.dll "%UPX_PATH%" --best --lzma --force build\bin\Release\platforms\qwindows.dll
+          if exist build\bin\Release\platforms\qminimal.dll "%UPX_PATH%" --best --lzma --force build\bin\Release\platforms\qminimal.dll
 
           echo "Skipping .NET assemblies (TempReader.exe, LibreHardwareMonitorLib.dll) as they are not supported by UPX."
         shell: cmd
