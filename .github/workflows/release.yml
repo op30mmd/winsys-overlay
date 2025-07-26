@@ -91,13 +91,29 @@ jobs:
         run: |
           if exist "%UPX_PATH%" (
             echo "Compressing executables with UPX..."
-            "%UPX_PATH%" --best --lzma build\bin\Release\winsys-overlay.exe
-            "%UPX_PATH%" --best --lzma build\bin\Release\TempReader.exe
-            echo "UPX compression completed."
+            
+            REM Compress main executable (C++ - usually works well)
+            echo "Compressing winsys-overlay.exe..."
+            "%UPX_PATH%" --best --lzma build\bin\Release\winsys-overlay.exe && (
+              echo "✓ Successfully compressed winsys-overlay.exe"
+            ) || (
+              echo "✗ Warning: UPX compression failed for winsys-overlay.exe"
+            )
+            
+            REM Try to compress TempReader.exe (.NET - might fail)
+            echo "Attempting to compress TempReader.exe (.NET executable)..."
+            "%UPX_PATH%" --best --lzma --force build\bin\Release\TempReader.exe && (
+              echo "✓ Successfully compressed TempReader.exe"
+            ) || (
+              echo "✗ Info: UPX compression failed for TempReader.exe (normal for .NET executables)"
+            )
+            
+            echo "UPX compression process completed (failures are non-critical)."
           ) else (
-            echo "UPX not found, skipping compression."
+            echo "UPX not found at %UPX_PATH%, skipping compression."
           )
         shell: cmd
+        continue-on-error: true
 
       - name: Package with CPack
         id: package_installer
