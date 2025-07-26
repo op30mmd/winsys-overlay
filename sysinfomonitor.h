@@ -49,6 +49,7 @@ signals:
 
 private slots:
     void poll();
+    void readTempData();
     void onTempReaderFinished(int exitCode, QProcess::ExitStatus exitStatus);
 
 private:
@@ -56,6 +57,7 @@ private:
     void updateLegacyStats(SysInfo& info);
     void loadDailyDataUsage();
     void saveDailyDataUsage();
+    void startTempReaderProcess();
 
     QTimer* m_timer;
     QProcess* m_tempReaderProcess;
