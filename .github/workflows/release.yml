@@ -159,42 +159,85 @@ jobs:
         id: package_7z
         run: |
           echo "=== Creating 7-Zip archive with maximum compression ==="
+          
+          set "VERSION=${{ steps.get_version.outputs.VERSION }}"
+          set "ARCHIVE_7Z_NAME=winsys-overlay-%VERSION%.7z"
+          set "ARCHIVE_ZIP_FALLBACK=winsys-overlay-%VERSION%-fallback.zip"
+          
           cd build\bin\Release
-          set "ARCHIVE_NAME=winsys-overlay-${{ steps.get_version.outputs.VERSION }}.7z"
-          echo "Creating archive: %ARCHIVE_NAME%"
+          echo "Current directory: %CD%"
+          echo "Creating archive: %ARCHIVE_7Z_NAME%"
           
           if exist "%SEVENZIP_PATH%" (
             echo "Using 7-Zip for maximum compression..."
-            "%SEVENZIP_PATH%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mmt=on "../../../%ARCHIVE_NAME%" *
+            "%SEVENZIP_PATH%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mmt=on "..\..\..\%ARCHIVE_7Z_NAME%" *
             
-            echo "=== Archive created successfully ==="
-            dir "..\..\..\%ARCHIVE_NAME%"
-            powershell -Command "$size = (Get-Item '../../../%ARCHIVE_NAME%').Length; 'Archive size: {0:N0} bytes ({1:N2} MB)' -f $size, ($size / 1MB)"
-            
-            echo "ARCHIVE_7Z=%ARCHIVE_NAME%" >> %GITHUB_OUTPUT%
+            if exist "..\..\..\%ARCHIVE_7Z_NAME%" (
+              echo "=== 7-Zip archive created successfully ==="
+              dir "..\..\..\%ARCHIVE_7Z_NAME%"
+              powershell -Command "$size = (Get-Item '../../../%ARCHIVE_7Z_NAME%').Length; 'Archive size: {0:N0} bytes ({1:N2} MB)' -f $size, ($size / 1MB)"
+              echo ARCHIVE_7Z=%ARCHIVE_7Z_NAME%>>%GITHUB_OUTPUT%
+            ) else (
+              echo "ERROR: 7-Zip archive creation failed!"
+              exit /b 1
+            )
           ) else (
             echo "7-Zip not found at %SEVENZIP_PATH%, falling back to PowerShell compression"
-            powershell -Command "Compress-Archive -Path * -DestinationPath '../../../winsys-overlay-${{ steps.get_version.outputs.VERSION }}.zip' -CompressionLevel Optimal -Force"
-            echo "ARCHIVE_7Z=winsys-overlay-${{ steps.get_version.outputs.VERSION }}.zip" >> %GITHUB_OUTPUT%
+            cd ..\..\..
+            powershell -Command "Compress-Archive -Path 'build/bin/Release/*' -DestinationPath '%ARCHIVE_ZIP_FALLBACK%' -CompressionLevel Optimal -Force"
+            
+            if exist "%ARCHIVE_ZIP_FALLBACK%" (
+              echo "=== Fallback ZIP archive created ==="
+              dir "%ARCHIVE_ZIP_FALLBACK%"
+              echo ARCHIVE_7Z=%ARCHIVE_ZIP_FALLBACK%>>%GITHUB_OUTPUT%
+            ) else (
+              echo "ERROR: Fallback ZIP creation failed!"
+              exit /b 1
+            )
           )
         shell: cmd
 
-      - name: Package with ZIP (Fallback/Alternative)
+      - name: Package with ZIP (Compatibility)
         id: package_zip
         run: |
           echo "=== Creating ZIP archive for compatibility ==="
           $archiveName = "winsys-overlay-${{ steps.get_version.outputs.VERSION }}.zip"
-          Compress-Archive -Path build/bin/Release/* -DestinationPath $archiveName -CompressionLevel Optimal -Force
-          $size = (Get-Item $archiveName).Length
-          Write-Host "ZIP Archive size: $($size.ToString('N0')) bytes ($([math]::Round($size / 1MB, 2)) MB)"
-          "ARCHIVE_ZIP=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          Write-Host "Creating ZIP archive: $archiveName"
+          
+          try {
+            Compress-Archive -Path "build/bin/Release/*" -DestinationPath $archiveName -CompressionLevel Optimal -Force
+            
+            if (Test-Path $archiveName) {
+              $size = (Get-Item $archiveName).Length
+              Write-Host "ZIP Archive created successfully!"
+              Write-Host "ZIP Archive size: $($size.ToString('N0')) bytes ($([math]::Round($size / 1MB, 2)) MB)"
+              "ARCHIVE_ZIP=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+            } else {
+              Write-Error "ZIP archive was not created!"
+              exit 1
+            }
+          } catch {
+            Write-Error "Failed to create ZIP archive: $_"
+            exit 1
+          }
         shell: powershell
 
       - name: Compare Archive Sizes
         run: |
           echo "=== Archive size comparison ==="
-          if exist "${{ steps.package_7z.outputs.ARCHIVE_7Z }}" (
-            powershell -Command "$size7z = (Get-Item '${{ steps.package_7z.outputs.ARCHIVE_7Z }}').Length; $sizeZip = (Get-Item '${{ steps.package_zip.outputs.ARCHIVE_ZIP }}').Length; $savings = [math]::Round((($sizeZip - $size7z) / $sizeZip) * 100, 1); Write-Host '7-Zip: {0:N0} bytes ({1:N2} MB)' -f $size7z, ($size7z / 1MB); Write-Host 'ZIP: {0:N0} bytes ({1:N2} MB)' -f $sizeZip, ($sizeZip / 1MB); Write-Host 'Space saved with 7-Zip: {0}%' -f $savings"
+          
+          set "ARCHIVE_7Z=${{ steps.package_7z.outputs.ARCHIVE_7Z }}"
+          set "ARCHIVE_ZIP=${{ steps.package_zip.outputs.ARCHIVE_ZIP }}"
+          
+          echo "7-Zip archive: %ARCHIVE_7Z%"
+          echo "ZIP archive: %ARCHIVE_ZIP%"
+          
+          if exist "%ARCHIVE_7Z%" if exist "%ARCHIVE_ZIP%" (
+            powershell -Command "try { $size7z = (Get-Item '%ARCHIVE_7Z%').Length; $sizeZip = (Get-Item '%ARCHIVE_ZIP%').Length; $savings = if ($sizeZip -gt 0) { [math]::Round((($sizeZip - $size7z) / $sizeZip) * 100, 1) } else { 0 }; Write-Host '7-Zip: {0:N0} bytes ({1:N2} MB)' -f $size7z, ($size7z / 1MB); Write-Host 'ZIP: {0:N0} bytes ({1:N2} MB)' -f $sizeZip, ($sizeZip / 1MB); Write-Host 'Space saved with 7-Zip: {0}%%' -f $savings } catch { Write-Host 'Error comparing archive sizes: $_' }"
+          ) else (
+            echo "One or both archive files not found for comparison"
+            if exist "%ARCHIVE_7Z%" echo "7-Zip archive exists: %ARCHIVE_7Z%"
+            if exist "%ARCHIVE_ZIP%" echo "ZIP archive exists: %ARCHIVE_ZIP%"
           )
         shell: cmd
 
@@ -203,12 +246,14 @@ jobs:
         with:
           name: winsys-overlay-build-7z
           path: ${{ steps.package_7z.outputs.ARCHIVE_7Z }}
+        if: steps.package_7z.outputs.ARCHIVE_7Z != ''
 
       - name: Upload ZIP Build Artifact
         uses: actions/upload-artifact@v4
         with:
           name: winsys-overlay-build-zip
           path: ${{ steps.package_zip.outputs.ARCHIVE_ZIP }}
+        if: steps.package_zip.outputs.ARCHIVE_ZIP != ''
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
