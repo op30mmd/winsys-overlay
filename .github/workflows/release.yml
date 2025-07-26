@@ -89,7 +89,10 @@ jobs:
           echo "Files in directory:"
           dir
           echo "Attempting to launch application for 3 seconds..."
-          timeout 3 winsys-overlay.exe || echo "Application test completed (timeout expected)"
+          start /wait /b winsys-overlay.exe &
+          timeout /t 3 /nobreak > nul
+          taskkill /f /im winsys-overlay.exe > nul 2>&1 || echo "Application may have already closed"
+          echo "Application test completed"
         shell: cmd
         continue-on-error: true
 
@@ -127,7 +130,10 @@ jobs:
           echo "=== Final application test after compression ==="
           cd build\bin\Release
           echo "Testing compressed application..."
-          timeout 3 winsys-overlay.exe || echo "Final test completed (timeout expected)"
+          start /wait /b winsys-overlay.exe &
+          timeout /t 3 /nobreak > nul
+          taskkill /f /im winsys-overlay.exe > nul 2>&1 || echo "Application may have already closed"
+          echo "Final test completed"
         shell: cmd
         continue-on-error: true
 
