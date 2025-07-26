@@ -4,30 +4,29 @@
 #include <QDir>
 #include <QSettings>
 #include <QDate>
+#include <QFileInfo>
 
 SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
 {
     m_tempReaderProcess = new QProcess(this);
     m_timer = new QTimer(this);
 
-    // Initialize daily data tracking
     m_dailyDataBytes = 0;
     m_lastResetDate = QDate::currentDate();
-    
-    // Initialize network tracking for speed calculation
+
     m_lastNetworkBytes = {0, 0};
     m_lastNetworkTime = QDateTime::currentMSecsSinceEpoch();
 
     connect(m_timer, &QTimer::timeout, this, &SysInfoMonitor::poll);
+    connect(m_tempReaderProcess, &QProcess::readyReadStandardOutput, this, &SysInfoMonitor::readTempData);
     connect(m_tempReaderProcess, QOverload<int, QProcess::ExitStatus>::of(&QProcess::finished), this, &SysInfoMonitor::onTempReaderFinished);
-
-    // Add error handling to see what happens with the process
     connect(m_tempReaderProcess, &QProcess::errorOccurred, this, [](QProcess::ProcessError error) {
         qWarning() << "QProcess error:" << error;
     });
 
     initializeLegacyCounters();
     loadDailyDataUsage();
+    startTempReaderProcess();
 }
 
 SysInfoMonitor::~SysInfoMonitor()
@@ -44,121 +43,69 @@ void SysInfoMonitor::start() {
 
 void SysInfoMonitor::stop() {
     m_timer->stop();
-    m_tempReaderProcess->kill();
+    if (m_tempReaderProcess->state() == QProcess::Running) {
+        m_tempReaderProcess->write("exit\n");
+        m_tempReaderProcess->waitForFinished(1000);
+        m_tempReaderProcess->kill();
+    }
     saveDailyDataUsage();
 }
 
+void SysInfoMonitor::startTempReaderProcess() {
+    if (m_tempReaderProcess->state() != QProcess::NotRunning) {
+        return;
+    }
+    QString programPath = QCoreApplication::applicationDirPath() + QDir::separator() + "TempReader.exe";
+    QFileInfo tempReaderInfo(programPath);
+
+    if (!tempReaderInfo.exists()) {
+        qWarning() << "TempReader.exe not found at:" << programPath;
+        m_sysInfo.cpuTemp = -1;
+        m_sysInfo.gpuTemp = -1;
+        return;
+    }
+    m_tempReaderProcess->start(programPath);
+}
+
+
 void SysInfoMonitor::poll() {
-    // Update the stats that don't come from the helper process
     updateLegacyStats(m_sysInfo);
 
-    // Start the helper process to get temperatures
-    if (m_tempReaderProcess->state() == QProcess::NotRunning) {
-        QString programPath = QCoreApplication::applicationDirPath() + QDir::separator() + "TempReader.exe";
-        qDebug() << "Attempting to run TempReader from:" << programPath;
-        
-        // Check if TempReader.exe exists
-        QFileInfo tempReaderInfo(programPath);
-        if (!tempReaderInfo.exists()) {
-            qWarning() << "TempReader.exe not found at:" << programPath;
-            m_sysInfo.cpuTemp = -1;
-            m_sysInfo.gpuTemp = -1;
-            emit statsUpdated(m_sysInfo);
-            return;
-        }
-        
-        // Run with debug flag occasionally to help troubleshoot
-        static int debugCounter = 0;
-        QStringList arguments;
-        if (++debugCounter % 20 == 0) {  // Debug every 20th call
-            arguments << "--debug";
-        }
-        
-        if (arguments.isEmpty()) {
-            m_tempReaderProcess->start(programPath);
-        } else {
-            m_tempReaderProcess->start(programPath, arguments);
+    if (m_tempReaderProcess->state() == QProcess::Running) {
+        m_tempReaderProcess->write("update\n");
+    } else {
+        startTempReaderProcess();
+    }
+
+    emit statsUpdated(m_sysInfo);
+}
+
+void SysInfoMonitor::readTempData() {
+    while (m_tempReaderProcess->canReadLine()) {
+        QByteArray output = m_tempReaderProcess->readLine();
+        QString outputStr(output.trimmed());
+
+        if (outputStr.contains("CPU:") && outputStr.contains("GPU:")) {
+            QStringList parts = outputStr.split(',');
+            if (parts.length() == 2) {
+                m_sysInfo.cpuTemp = parts[0].mid(4).toDouble();
+                m_sysInfo.gpuTemp = parts[1].mid(4).toDouble();
+            }
         }
     }
 }
 
 void SysInfoMonitor::onTempReaderFinished(int exitCode, QProcess::ExitStatus exitStatus) {
-    if (exitStatus == QProcess::NormalExit && exitCode == 0) {
-        QByteArray output = m_tempReaderProcess->readAllStandardOutput();
-        QString outputStr(output.trimmed());
-        
-        // Check if this was a debug run
-        if (outputStr.contains("Hardware:") || outputStr.contains("Sensor:")) {
-            // This is debug output, log it for troubleshooting
-            qDebug() << "TempReader debug output:\n" << outputStr;
-            
-            // Still try to parse the last line for actual values
-            QStringList lines = outputStr.split('\n');
-            for (int i = lines.size() - 1; i >= 0; i--) {
-                if (lines[i].contains("CPU:") && lines[i].contains("GPU:")) {
-                    outputStr = lines[i];
-                    break;
-                }
-            }
-        }
-        
-        qDebug() << "TempReader output:" << outputStr;
-
-        // Parse the output: "CPU:XX.X,GPU:XX.X"
-        if (outputStr.contains("CPU:") && outputStr.contains("GPU:")) {
-            QStringList parts = outputStr.split(',');
-            if (parts.length() == 2) {
-                QString cpuTempStr = parts[0].mid(4); // Remove "CPU:"
-                QString gpuTempStr = parts[1].mid(4); // Remove "GPU:"
-                
-                bool cpuOk, gpuOk;
-                double cpuTemp = cpuTempStr.toDouble(&cpuOk);
-                double gpuTemp = gpuTempStr.toDouble(&gpuOk);
-                
-                m_sysInfo.cpuTemp = cpuOk ? cpuTemp : -1;
-                m_sysInfo.gpuTemp = gpuOk ? gpuTemp : -1;
-                
-                if (cpuOk && cpuTemp > 0) {
-                    qDebug() << "Successfully read CPU temperature:" << cpuTemp << "°C";
-                } else {
-                    qDebug() << "Failed to read valid CPU temperature, raw value:" << cpuTempStr;
-                }
-                
-                if (gpuOk && gpuTemp > 0) {
-                    qDebug() << "Successfully read GPU temperature:" << gpuTemp << "°C";
-                } else {
-                    qDebug() << "Failed to read valid GPU temperature, raw value:" << gpuTempStr;
-                }
-            } else {
-                qWarning() << "Failed to parse TempReader output (wrong format):" << outputStr;
-                m_sysInfo.cpuTemp = -1;
-                m_sysInfo.gpuTemp = -1;
-            }
-        } else {
-            qWarning() << "TempReader output doesn't contain expected format:" << outputStr;
-            m_sysInfo.cpuTemp = -1;
-            m_sysInfo.gpuTemp = -1;
-        }
-    } else {
-        qWarning() << "TempReader.exe failed or crashed. Exit code:" << exitCode << "Status:" << exitStatus;
-        QByteArray errorOutput = m_tempReaderProcess->readAllStandardError();
-        if (!errorOutput.isEmpty()) {
-            qWarning() << "TempReader stderr:" << errorOutput;
-        }
-        m_sysInfo.cpuTemp = -1;
-        m_sysInfo.gpuTemp = -1;
-    }
-
-    // Emit the final, combined stats
-    emit statsUpdated(m_sysInfo);
+    qWarning() << "TempReader.exe finished unexpectedly. Exit code:" << exitCode << "Status:" << exitStatus;
+    m_sysInfo.cpuTemp = -1;
+    m_sysInfo.gpuTemp = -1;
 }
 
 void SysInfoMonitor::loadDailyDataUsage()
 {
     QSettings s;
     QDate savedDate = s.value("network/lastResetDate", QDate::currentDate()).toDate();
-    
-    // Reset if it's a new day
+
     if (savedDate != QDate::currentDate()) {
         m_dailyDataBytes = 0;
         m_lastResetDate = QDate::currentDate();
@@ -175,10 +122,7 @@ void SysInfoMonitor::saveDailyDataUsage()
     s.setValue("network/lastResetDate", m_lastResetDate);
 }
 
-// --- Restored Legacy PDH Code ---
-
 void SysInfoMonitor::initializeLegacyCounters() {
-    // Initialize all queries and counters
     PdhOpenQuery(nullptr, 0, &m_cpuQuery);
     PdhAddEnglishCounter(m_cpuQuery, L"\\Processor(_Total)\\% Processor Time", 0, &m_cpuTotalCounter);
     PdhCollectQueryData(m_cpuQuery);
@@ -187,7 +131,6 @@ void SysInfoMonitor::initializeLegacyCounters() {
     PdhAddEnglishCounter(m_diskQuery, L"\\PhysicalDisk(_Total)\\% Disk Time", 0, &m_diskTotalCounter);
     PdhCollectQueryData(m_diskQuery);
 
-    // GPU counters
     PdhOpenQuery(nullptr, 0, &m_gpuQuery);
     const wchar_t* gpuCounterPath = L"\\GPU Engine(*)\\Utilization Percentage";
     DWORD gpuBufferSize = 0;
@@ -206,7 +149,6 @@ void SysInfoMonitor::initializeLegacyCounters() {
         PdhCollectQueryData(m_gpuQuery);
     }
 
-    // Network counters
     PdhOpenQuery(nullptr, 0, &m_networkQuery);
     const wchar_t* receivedPath = L"\\Network Interface(*)\\Bytes Received/sec";
     const wchar_t* sentPath = L"\\Network Interface(*)\\Bytes Sent/sec";
@@ -218,7 +160,6 @@ void SysInfoMonitor::initializeLegacyCounters() {
             if (PdhExpandWildCardPathW(nullptr, path, pathBuffer.data(), &bufferSize, 0) == ERROR_SUCCESS) {
                 for (const wchar_t* p = pathBuffer.data(); *p != L'\0'; p += wcslen(p) + 1) {
                     QString interfaceName = QString::fromWCharArray(p);
-                    // Skip loopback and other non-physical interfaces
                     if (!interfaceName.contains("Loopback", Qt::CaseInsensitive) &&
                         !interfaceName.contains("Teredo", Qt::CaseInsensitive) &&
                         !interfaceName.contains("isatap", Qt::CaseInsensitive)) {
@@ -243,7 +184,6 @@ void SysInfoMonitor::initializeLegacyCounters() {
 void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
     PDH_FMT_COUNTERVALUE counterVal;
 
-    // CPU Load
     if (m_cpuQuery && PdhCollectQueryData(m_cpuQuery) == ERROR_SUCCESS &&
         PdhGetFormattedCounterValue(m_cpuTotalCounter, PDH_FMT_DOUBLE, nullptr, &counterVal) == ERROR_SUCCESS) {
         info.cpuLoad = counterVal.doubleValue;
@@ -251,7 +191,6 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
         info.cpuLoad = 0.0;
     }
 
-    // Memory Usage
     MEMORYSTATUSEX memInfo;
     memInfo.dwLength = sizeof(MEMORYSTATUSEX);
     if (GlobalMemoryStatusEx(&memInfo)) {
@@ -264,7 +203,6 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
         info.availRamMB = 0;
     }
 
-    // Disk Load
     if (m_diskQuery && PdhCollectQueryData(m_diskQuery) == ERROR_SUCCESS &&
         PdhGetFormattedCounterValue(m_diskTotalCounter, PDH_FMT_DOUBLE, nullptr, &counterVal) == ERROR_SUCCESS) {
         info.diskLoad = counterVal.doubleValue;
@@ -272,7 +210,6 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
         info.diskLoad = 0.0;
     }
 
-    // GPU Load
     if (m_gpuQuery && !m_gpuCounters.isEmpty() && PdhCollectQueryData(m_gpuQuery) == ERROR_SUCCESS) {
         double maxGpuLoad = 0.0;
         for (PDH_HCOUNTER gpuCounter : m_gpuCounters) {
@@ -287,7 +224,6 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
         info.gpuLoad = 0.0;
     }
 
-    // Network Speed and Daily Usage
     if (m_networkQuery && PdhCollectQueryData(m_networkQuery) == ERROR_SUCCESS) {
         auto getCounterValue = [&](QList<PDH_HCOUNTER>& counters) {
             double total = 0.0;
@@ -303,7 +239,6 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
         double currentUpBytes = getCounterValue(m_networkBytesSentCounters);
         qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
         
-        // Calculate speeds (bytes per second to MB per second)
         if (m_lastNetworkTime > 0) {
             double timeDiffSec = (currentTime - m_lastNetworkTime) / 1000.0;
             if (timeDiffSec > 0) {
@@ -313,7 +248,6 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
                 info.networkDownloadSpeed = qMax(0.0, downSpeedBps / (1024.0 * 1024.0));
                 info.networkUploadSpeed = qMax(0.0, upSpeedBps / (1024.0 * 1024.0));
                 
-                // Update daily data usage
                 m_dailyDataBytes += qMax(0.0, downSpeedBps + upSpeedBps) * timeDiffSec;
             }
         }
@@ -328,7 +262,6 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
         info.dailyDataUsageMB = m_dailyDataBytes / (1024.0 * 1024.0);
     }
 
-    // Process Count
     DWORD processIds[1024];
     DWORD bytesNeeded;
     if (EnumProcesses(processIds, sizeof(processIds), &bytesNeeded)) {
@@ -337,14 +270,11 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
         info.activeProcesses = 0;
     }
 
-    // System Uptime
     ULONGLONG uptimeMs = GetTickCount64();
-    info.systemUptime = uptimeMs / (1000.0 * 60.0 * 60.0); // Convert to hours
+    info.systemUptime = uptimeMs / (1000.0 * 60.0 * 60.0);
 
-    // FPS - placeholder (would need more complex implementation)
-    info.fps = 0.0; // Not implemented yet
+    info.fps = 0.0;
     
-    // Check if we need to reset daily data (new day)
     if (QDate::currentDate() != m_lastResetDate) {
         m_dailyDataBytes = 0;
         m_lastResetDate = QDate::currentDate();
