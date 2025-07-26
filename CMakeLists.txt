@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.16)
 project(WinSysOverlay LANGUAGES CXX)
 
@@ -8,16 +7,9 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# Enable C++/CLI support
+# Enable C++/CLI support and set the correct exception handling model
 set_property(GLOBAL PROPERTY USE_MSVC_RUNTIME_LIBRARY_DLL ON)
-
-# Enable Link-Time Optimization (LTO) for smaller executables
-include(CheckIPOSupported)
-check_ipo_supported(RESULT ipo_supported)
-if(ipo_supported)
-  set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
-  message(STATUS "IPO/LTO enabled.")
-endif()
+add_compile_options(/EHa)
 
 # Explicitly tell CMake where to find your Qt installation.
 set(CMAKE_PREFIX_PATH "C:/Qt/6.9.1/msvc2022_64" CACHE PATH "Path to Qt installation")
@@ -34,16 +26,11 @@ if(NOT Qt6_windeployqt_EXECUTABLE)
     )
 endif()
 
-# Check if we found windeployqt
 if(NOT Qt6_windeployqt_EXECUTABLE)
-    message(STATUS "CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
-    message(STATUS "Looking for windeployqt in: ${CMAKE_PREFIX_PATH}/bin")
-    message(FATAL_ERROR "Failed to find windeployqt.exe. Ensure your Qt installation is correct and CMAKE_PREFIX_PATH is set properly.")
+    message(FATAL_ERROR "Failed to find windeployqt.exe.")
 endif()
 
 message(STATUS "Found windeployqt: ${Qt6_windeployqt_EXECUTABLE}")
-
-# Get the directory containing the Qt binaries
 get_filename_component(QT_BIN_DIR "${Qt6_windeployqt_EXECUTABLE}" DIRECTORY)
 
 add_executable(winsys-overlay WIN32
@@ -58,38 +45,24 @@ add_executable(winsys-overlay WIN32
     HardwareMonitor.cpp
 )
 
-# Set exception handling for the whole project to be compatible with /clr
-target_compile_options(winsys-overlay PRIVATE /EHa)
-
-# Enable /clr for the C++/CLI wrapper
-set_source_files_properties(HardwareMonitor.cpp PROPERTIES COMPILE_FLAGS "/clr")
-
 # Set the .NET Framework version for the C++/CLI parts
 set_property(TARGET winsys-overlay PROPERTY VS_DOTNET_TARGET_FRAMEWORK_VERSION "v4.7.2")
 
-# Link against required Windows libraries for enhanced monitoring
+# Tell CMake that this specific file is managed code
+set_source_files_properties(HardwareMonitor.cpp PROPERTIES VS_COMPILE_AS_MANAGED "Managed")
+
 target_link_libraries(winsys-overlay PRIVATE 
     Qt6::Widgets 
-    pdh          # Performance Data Helper
-    psapi        # Process Status API
-    iphlpapi     # IP Helper API for network stats
-    ws2_32       # Windows Sockets API
-    wbemuuid     # WMI
+    pdh psapi iphlpapi ws2_32 wbemuuid
 )
 
 if(WIN32)
     include(GNUInstallDirs)
-    install(TARGETS winsys-overlay
-        RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-    )
+    install(TARGETS winsys-overlay RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-    # Fixed Deployment Method
     add_custom_command(TARGET winsys-overlay POST_BUILD
         COMMAND "${Qt6_windeployqt_EXECUTABLE}"
-            --release
-            --no-translations
-            --no-opengl-sw
-            --no-system-d3d-compiler
+            --release --no-translations --no-opengl-sw --no-system-d3d-compiler
             --dir "$<TARGET_FILE_DIR:winsys-overlay>"
             "$<TARGET_FILE:winsys-overlay>"
         WORKING_DIRECTORY "${QT_BIN_DIR}"
