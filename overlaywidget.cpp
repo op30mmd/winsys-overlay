@@ -436,13 +436,31 @@ void OverlayWidget::updateStats(const SysInfo &info)
     m_diskLabel->setText(QString("DSK: %1%").arg(info.diskLoad, 0, 'f', 1));
     m_gpuLabel->setText(QString("GPU: %1%").arg(info.gpuLoad, 0, 'f', 1));
 
-    // New metrics
-    m_fpsLabel->setText("FPS: N/A");
+    // Network metrics with better formatting
+    if (info.networkDownloadSpeed >= 1.0) {
+        m_netDownLabel->setText(QString("↓: %1 MB/s").arg(info.networkDownloadSpeed, 0, 'f', 2));
+    } else if (info.networkDownloadSpeed >= 0.001) {
+        m_netDownLabel->setText(QString("↓: %1 KB/s").arg(info.networkDownloadSpeed * 1024, 0, 'f', 1));
+    } else {
+        m_netDownLabel->setText("↓: 0.00 KB/s");
+    }
     
-    m_netDownLabel->setText(QString("↓: %1 MB/s").arg(info.networkDownloadSpeed, 0, 'f', 2));
-    m_netUpLabel->setText(QString("↑: %1 MB/s").arg(info.networkUploadSpeed, 0, 'f', 2));
-    m_dailyDataLabel->setText(QString("Daily: %1 MB").arg(info.dailyDataUsageMB));
+    if (info.networkUploadSpeed >= 1.0) {
+        m_netUpLabel->setText(QString("↑: %1 MB/s").arg(info.networkUploadSpeed, 0, 'f', 2));
+    } else if (info.networkUploadSpeed >= 0.001) {
+        m_netUpLabel->setText(QString("↑: %1 KB/s").arg(info.networkUploadSpeed * 1024, 0, 'f', 1));
+    } else {
+        m_netUpLabel->setText("↑: 0.00 KB/s");
+    }
     
+    // Daily data usage with better formatting
+    if (info.dailyDataUsageMB >= 1024) {
+        m_dailyDataLabel->setText(QString("Daily: %1 GB").arg(info.dailyDataUsageMB / 1024.0, 0, 'f', 2));
+    } else {
+        m_dailyDataLabel->setText(QString("Daily: %1 MB").arg(info.dailyDataUsageMB, 0, 'f', 0));
+    }
+    
+    // Temperature readings
     if (info.cpuTemp >= 0) {
         m_cpuTempLabel->setText(QString("CPU°: %1°C").arg(info.cpuTemp, 0, 'f', 1));
     } else {
@@ -455,16 +473,26 @@ void OverlayWidget::updateStats(const SysInfo &info)
         m_gpuTempLabel->setText("GPU°: N/A");
     }
     
+    // Process count
     m_processesLabel->setText(QString("Proc: %1").arg(info.activeProcesses));
     
-    // Format uptime nicely
+    // System uptime with better formatting
     if (info.systemUptime < 1) {
         m_uptimeLabel->setText(QString("Up: %1m").arg(info.systemUptime * 60, 0, 'f', 0));
     } else if (info.systemUptime < 24) {
         m_uptimeLabel->setText(QString("Up: %1h").arg(info.systemUptime, 0, 'f', 1));
     } else {
-        m_uptimeLabel->setText(QString("Up: %1d").arg(info.systemUptime / 24, 0, 'f', 1));
+        int days = static_cast<int>(info.systemUptime / 24);
+        double remainingHours = info.systemUptime - (days * 24);
+        if (remainingHours < 0.1) {
+            m_uptimeLabel->setText(QString("Up: %1d").arg(days));
+        } else {
+            m_uptimeLabel->setText(QString("Up: %1d %2h").arg(days).arg(remainingHours, 0, 'f', 0));
+        }
     }
+
+    // FPS - placeholder for now
+    m_fpsLabel->setText("FPS: N/A");
 
 #ifdef Q_OS_WIN
     // Periodically re-apply the HWND_TOPMOST flag
