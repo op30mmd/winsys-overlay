@@ -50,6 +50,7 @@ add_executable(winsys-overlay WIN32
     sysinfomonitor.cpp
     settingsdialog.h
     settingsdialog.cpp
+    nvml.cpp
 )
 
 # Link against required Windows libraries for enhanced monitoring
@@ -59,6 +60,8 @@ target_link_libraries(winsys-overlay PRIVATE
     psapi        # Process Status API
     iphlpapi     # IP Helper API for network stats
     ws2_32       # Windows Sockets API
+    nvml         # NVIDIA Management Library
+    wbemuuid     # WMI
 )
 
 if(WIN32)
