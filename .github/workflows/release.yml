@@ -34,8 +34,18 @@ jobs:
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: powershell
 
-      - name: Setup NSIS
-        uses: joncloud/makensis-action@v4.1
+      - name: Setup NSIS Manually
+        run: |
+          $nsis_url = "https://prdownloads.sourceforge.net/nsis/nsis-3.09-setup.exe"
+          $nsis_installer = "nsis-setup.exe"
+          echo "Downloading NSIS from $nsis_url..."
+          Invoke-WebRequest -Uri $nsis_url -OutFile $nsis_installer
+          echo "Installing NSIS silently..."
+          Start-Process -FilePath $nsis_installer -ArgumentList "/S" -Wait
+          $nsis_path = "${env:ProgramFiles(x86)}\NSIS"
+          echo "Adding NSIS installation directory to PATH: $nsis_path"
+          echo $nsis_path >> $env:GITHUB_PATH
+        shell: powershell
 
       - name: Configure CMake
         run: |
