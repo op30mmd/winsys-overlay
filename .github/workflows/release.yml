@@ -8,8 +8,8 @@ on:
 
 env:
   QT_DIR: C:\Qt\6.9.1\msvc2022_64
-  VCVARS_PATH: "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat"
-  UPX_PATH: "C:\upx\upx.exe"
+  VCVARS_PATH: 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat'
+  UPX_PATH: 'C:\upx\upx.exe'
 
 jobs:
   build-and-release:
