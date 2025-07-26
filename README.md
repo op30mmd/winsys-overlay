@@ -1,96 +1,156 @@
 # WinSys-Overlay
 
-A simple, lightweight, always-on-top system resource monitor for Windows, built with C++ and Qt.
-
-
+A comprehensive, lightweight, always-on-top system resource monitor for Windows, built with C++ and Qt. Monitor your system's performance with a customizable overlay that stays visible over all applications.
 
 ## Features
 
-*   **Comprehensive Monitoring**: Real-time display of key system metrics:
-    *   CPU Load (%)
-    *   Memory Usage (%)
-    *   Detailed RAM Usage (Used/Total MB)
-    *   Physical Disk Activity (%)
-    *   GPU Load (highest utilization across all engines)
-*   **Always-On-Top**: Stays visible over all other windows, including the Windows Start Menu and Task Manager.
-*   **Minimalist UI**: A clean, frameless, and transparent interface that doesn't get in your way.
-*   **Draggable**: Simply click and drag the overlay to position it anywhere on your screen.
-*   **High Readability**: Text includes a subtle drop shadow, ensuring it's easy to read against any background, light or dark.
+### 🖥️ Comprehensive System Monitoring
+*   **CPU Load (%)**: Real-time processor utilization
+*   **Memory Usage (%)**: System memory utilization percentage
+*   **Detailed RAM Usage**: Used/Total memory in MB
+*   **Physical Disk Activity (%)**: Disk I/O utilization
+*   **GPU Load (%)**: Highest utilization across all GPU engines
+*   **FPS Estimation**: Estimated frame rate based on system performance
+*   **Network Activity**: Real-time download and upload speeds (MB/s)
+*   **Daily Data Usage**: Internet usage tracking in MB per day
+*   **CPU Temperature**: Processor temperature monitoring (when available)
+*   **GPU Temperature**: Graphics card temperature (vendor-specific)
+*   **Active Processes**: Count of running system processes
+*   **System Uptime**: How long the system has been running
 
-*   **Highly Customizable**: Right-click to open the settings panel and configure:
-    *   Font size and color
-    *   Background color and opacity
-    *   Which metrics are displayed
-    *   Data refresh interval
-*   **Persistent**: Saves your settings and last known position automatically.
+### 🎨 Highly Customizable Interface
+*   **Layout Options**: Choose between vertical or horizontal layout orientations
+*   **Font Customization**: Adjustable font size (8-24px) and color
+*   **Background Styling**: Customizable background color and opacity (0-255)
+*   **Selective Display**: Show/hide individual metrics as needed
+*   **Icon Integration**: Each metric displays with a distinctive icon
+*   **Visual Effects**: Text includes subtle drop shadows for readability
+
+### ⚙️ Advanced Behavior Controls
+*   **Update Frequency**: Configurable refresh interval (250ms - 5000ms)
+*   **Persistent Settings**: Saves your preferences and window position automatically
+*   **Smart Daily Tracking**: Network usage resets daily with 30-day history cleanup
+*   **Performance Optimized**: Efficient Windows PDH API integration
+
+### 🖱️ User-Friendly Interface
+*   **Always-On-Top**: Stays visible over all other windows, including Start Menu and Task Manager
+*   **Frameless Design**: Clean, minimalist interface that doesn't obstruct your workflow
+*   **Draggable**: Click and drag to position anywhere on your screen
+*   **Context Menu**: Right-click for quick access to settings and exit options
+*   **Scrollable Settings**: Organized settings dialog with grouped options
 
 ## Usage
 
-*   **Move**: Click and drag with the left mouse button to move the overlay.
-*   **Options**: Right-click the overlay to open a context menu.
-    *   **Settings**: Opens a dialog to customize the overlay's appearance and behavior.
-    *   **Close**: Exits the application.
+### Basic Controls
+*   **Move Overlay**: Left-click and drag to reposition the overlay anywhere on screen
+*   **Access Settings**: Right-click the overlay to open the context menu
+*   **Customize Display**: Use the Settings dialog to configure which metrics are shown
+*   **Adjust Appearance**: Modify colors, fonts, opacity, and layout orientation
+
+### Settings Categories
+
+#### 🎨 Appearance
+- Layout orientation (Vertical/Horizontal)
+- Font size and color selection
+- Background color and opacity control
+
+#### 📊 Displayed Information
+Toggle visibility for each metric:
+- Core metrics: CPU, Memory, RAM, Disk, GPU (enabled by default)
+- Extended metrics: FPS, Network speeds, Daily usage, Temperatures, Processes, Uptime (disabled by default)
+
+#### ⚙️ Behavior
+- Update interval configuration
+- Performance optimization settings
 
 ---
 
 ## Building from Source
 
-To build the project yourself, you will need to have a few tools installed and follow the steps below.
-
 ### Prerequisites
 
-1.  **A C++ Compiler**: [Visual Studio](https://visualstudio.microsoft.com/vs/community/) (Community, Professional, or Enterprise) with the "Desktop development with C++" workload installed.
-2.  **CMake**: Download and install from the [official CMake website](https://cmake.org/download/).
-3.  **Qt 6**: Download the [Qt Online Installer](https://www.qt.io/download-qt-installer). During installation, make sure to select a Qt 6 version (e.g., 6.5.0) for your compiler (e.g., MSVC 2019/2022 64-bit) and ensure the **Qt Widgets** module is included.
+1.  **Visual Studio**: [Download](https://visualstudio.microsoft.com/vs/community/) with "Desktop development with C++" workload
+2.  **CMake**: Download from [cmake.org](https://cmake.org/download/)
+3.  **Qt 6**: Download the [Qt Online Installer](https://www.qt.io/download-qt-installer)
+    - Select Qt 6.x version for MSVC 2019/2022 64-bit
+    - Ensure **Qt Widgets** module is included
 
 ### Build Steps
 
 1.  **Clone the repository:**
-    ```sh
+    ```bash
     git clone https://github.com/op30mmd/winsys-overlay.git
     cd winsys-overlay
     ```
 
-2.  **Create a build directory:**
-    ```sh
+2.  **Create build directory:**
+    ```bash
     mkdir build
     cd build
     ```
 
-3.  **Configure the project with CMake.**
-    
-    You must tell CMake where your Qt installation is located. Replace the path in the command below with the actual path to your Qt version.
-
-    ```sh
-    # Example path for Qt 6.5.0 installed for MSVC 2019 64-bit
-    cmake .. -DCMAKE_PREFIX_PATH=C:\Qt\6.5.0\msvc2019_64
+3.  **Configure with CMake:**
+    ```bash
+    # Replace with your actual Qt installation path
+    cmake .. -DCMAKE_PREFIX_PATH=C:\Qt\6.9.1\msvc2022_64
     ```
 
 4.  **Build the application:**
-    ```sh
+    ```bash
     cmake --build . --config Release
     ```
 
-## Running the Application
+### Automated Builds
 
-After a successful build, the executable (`winsys-overlay.exe`) and all required Qt DLLs will be located in the `build\Release` directory.
+The project includes GitHub Actions workflow for automated building:
+- Supports self-hosted Windows runners
+- Automatic dependency resolution with windeployqt
+- Optional UPX compression for smaller executables
+- Automated releases on version tags
 
-You can run the application by double-clicking the executable or by running it from the command line:
+## Technical Implementation
 
-```sh
-.\Release\winsys-overlay.exe
-```
+### System Monitoring Architecture
+- **Windows PDH API**: Native Performance Data Helper for efficient system metrics
+- **Multi-Query Design**: Separate PDH queries for CPU, Disk, GPU, Network, and Temperature monitoring
+- **Smart Caching**: Optimized data collection to minimize system impact
+- **Wildcard Counter Expansion**: Automatically detects available GPU engines and network interfaces
 
-## How It Works
+### Data Persistence
+- **QSettings Integration**: Cross-platform settings storage
+- **Daily Usage Tracking**: Persistent network usage with automatic cleanup
+- **Position Memory**: Remembers overlay position between sessions
 
-The application uses the native Windows Performance Data Helper (PDH) API to query system information counters for CPU, Disk, and GPU utilization. Memory information is gathered using the `GlobalMemoryStatusEx` function.
+### Windows Integration
+- **Always-On-Top Enforcement**: Periodic re-assertion of topmost window status
+- **Transparent Background**: Native transparency support with customizable opacity
+- **System API Integration**: Direct Windows API calls for enhanced functionality
 
-To ensure the overlay remains on top of system UI like the Start Menu, it periodically re-asserts its "topmost" window status using the `SetWindowPos` Win32 API call with the `HWND_TOPMOST` and `SWP_NOACTIVATE` flags.
+## Performance Considerations
+
+The overlay is designed to be lightweight and efficient:
+- **Minimal CPU Impact**: Optimized update cycles and efficient API usage
+- **Memory Efficient**: Smart counter management and automatic cleanup
+- **Configurable Updates**: Adjustable refresh rates to balance accuracy and performance
+- **GPU Monitoring**: Non-intrusive GPU utilization tracking across all engines
 
 ## Contributing
 
-Contributions are welcome! If you have ideas for new features or find a bug, feel free to open an issue or submit a pull request.
+Contributions are welcome! Areas for potential enhancement:
+- Additional system metrics
+- Theme and styling improvements
+- Cross-platform support expansion
+- Performance optimizations
+
+Please feel free to open issues for bug reports or feature requests, and submit pull requests for improvements.
 
 ## License
 
 This project is licensed under the MIT License. See the `LICENSE` file for details.
+
+## System Requirements
+
+- **OS**: Windows 10/11 (64-bit recommended)
+- **Runtime**: Visual C++ Redistributable 2019/2022
+- **Memory**: Minimal system impact (< 50MB RAM)
+- **Permissions**: Standard user privileges (no administrator rights required)
