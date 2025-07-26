@@ -54,29 +54,51 @@ target_link_libraries(winsys-overlay PRIVATE
 
 # --- Deployment & Installation ---
 
-install(TARGETS winsys-overlay RUNTIME DESTINATION bin)
+# Install the main executable and associate it with the "Application" component
+install(TARGETS winsys-overlay RUNTIME DESTINATION bin COMPONENT Application)
 
+# Use windeployqt to deploy Qt dependencies into the installation directory
 install(CODE "
     message(STATUS \"Running windeployqt...\")
     execute_process(
         COMMAND ${Qt6_windeployqt_EXECUTABLE} --release --no-translations --dir \"${CMAKE_INSTALL_PREFIX}/bin\" \"$<TARGET_FILE:winsys-overlay>\"
     )
-")
+" COMPONENT Application)
 
+# Install the C# helper application and its dependency
 install(FILES
     "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/TempReader.exe"
     "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/LibreHardwareMonitorLib.dll"
     DESTINATION bin
+    COMPONENT Application
 )
+
+# --- CPack Configuration ---
 
 set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
 set(CPACK_PACKAGE_VERSION "1.0.0")
-set(CPACK_PACKAGE_VENDOR "Gemini")
+# Fix Vendor/Developer name
+set(CPACK_PACKAGE_VENDOR "op30mmd")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A simple system information overlay for Windows.")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")
 set(CPACK_GENERATOR "NSIS")
 
+# Include the license file in the installer
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+
+# NSIS specific settings
+set(CPACK_NSIS_PACKAGE_NAME "${PROJECT_NAME} ${CPACK_PACKAGE_VERSION} Installer")
+set(CPACK_NSIS_INSTALL_ROOT "$PROGRAMFILES")
+set(CPACK_NSIS_COMPONENT_SECTION_NAME_ENABLE ON)
+set(CPACK_NSIS_DISPLAY_NAME "${CPACK_PACKAGE_NAME} version ${CPACK_PACKAGE_VERSION}")
+set(CPACK_NSIS_INSTALLED_ICON_NAME "winsys-overlay.exe")
+set(CPACK_NSIS_CREATE_ICONS_EXTRA "CreateShortCut '$DESKTOP\\\\${CPACK_PACKAGE_NAME}.lnk' '$INSTDIR\\\\bin\\\\winsys-overlay.exe'")
+set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\\\${CPACK_PACKAGE_NAME}.lnk'")
+
+
+# Define components for CPack
+set(CPACK_COMPONENTS_ALL Application)
+install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_INSTALL_PREFIX}" RENAME "LICENSE.txt" COMPONENT Application)
+
+
 include(CPack)
-
-
-
