@@ -35,7 +35,7 @@ jobs:
         shell: powershell
 
       - name: Setup NSIS
-        uses: crazy-max/ghaction-nsis@v3
+        uses: Installer-Actions/setup-nsis@v1
 
       - name: Configure CMake
         run: |
