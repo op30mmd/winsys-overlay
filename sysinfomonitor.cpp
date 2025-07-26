@@ -409,7 +409,6 @@ void SysInfoMonitor::updateTemperatures(SysInfo& info)
         }
         info.gpuTemp = maxGpuTemp;
     } else {
-.
         info.gpuTemp = 0.0;
     }
 
