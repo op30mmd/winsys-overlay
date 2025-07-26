@@ -4,7 +4,6 @@
 #include <QVector>
 #include <QSettings>
 #include <iomanip>
-#include <iomanip>
 #include <QStandardPaths>
 #include <QDir>
 
