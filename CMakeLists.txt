@@ -40,7 +40,7 @@ endif()
 message(STATUS "Found windeployqt: ${Qt6_windeployqt_EXECUTABLE}")
 
 # Get the directory containing the Qt binaries
-get_filename_component(QT_BIN_DIR "${Qt6_windeployqt_EXECUTABLE}" DIRECTORY)
+get_filename_component(QT_BIN_DIR "${Qt6_wndeployqt_EXECUTABLE}" DIRECTORY)
 
 add_executable(winsys-overlay WIN32
     main.cpp
