@@ -56,7 +56,29 @@ void SysInfoMonitor::poll() {
     if (m_tempReaderProcess->state() == QProcess::NotRunning) {
         QString programPath = QCoreApplication::applicationDirPath() + QDir::separator() + "TempReader.exe";
         qDebug() << "Attempting to run TempReader from:" << programPath;
-        m_tempReaderProcess->start(programPath);
+        
+        // Check if TempReader.exe exists
+        QFileInfo tempReaderInfo(programPath);
+        if (!tempReaderInfo.exists()) {
+            qWarning() << "TempReader.exe not found at:" << programPath;
+            m_sysInfo.cpuTemp = -1;
+            m_sysInfo.gpuTemp = -1;
+            emit statsUpdated(m_sysInfo);
+            return;
+        }
+        
+        // Run with debug flag occasionally to help troubleshoot
+        static int debugCounter = 0;
+        QStringList arguments;
+        if (++debugCounter % 20 == 0) {  // Debug every 20th call
+            arguments << "--debug";
+        }
+        
+        if (arguments.isEmpty()) {
+            m_tempReaderProcess->start(programPath);
+        } else {
+            m_tempReaderProcess->start(programPath, arguments);
+        }
     }
 }
 
@@ -64,28 +86,65 @@ void SysInfoMonitor::onTempReaderFinished(int exitCode, QProcess::ExitStatus exi
     if (exitStatus == QProcess::NormalExit && exitCode == 0) {
         QByteArray output = m_tempReaderProcess->readAllStandardOutput();
         QString outputStr(output.trimmed());
+        
+        // Check if this was a debug run
+        if (outputStr.contains("Hardware:") || outputStr.contains("Sensor:")) {
+            // This is debug output, log it for troubleshooting
+            qDebug() << "TempReader debug output:\n" << outputStr;
+            
+            // Still try to parse the last line for actual values
+            QStringList lines = outputStr.split('\n');
+            for (int i = lines.size() - 1; i >= 0; i--) {
+                if (lines[i].contains("CPU:") && lines[i].contains("GPU:")) {
+                    outputStr = lines[i];
+                    break;
+                }
+            }
+        }
+        
         qDebug() << "TempReader output:" << outputStr;
 
         // Parse the output: "CPU:XX.X,GPU:XX.X"
-        QStringList parts = outputStr.split(',');
-        if (parts.length() == 2) {
-            QString cpuTempStr = parts[0].mid(4); // Remove "CPU:"
-            QString gpuTempStr = parts[1].mid(4); // Remove "GPU:"
-            
-            bool cpuOk, gpuOk;
-            double cpuTemp = cpuTempStr.toDouble(&cpuOk);
-            double gpuTemp = gpuTempStr.toDouble(&gpuOk);
-            
-            m_sysInfo.cpuTemp = cpuOk ? cpuTemp : -1;
-            m_sysInfo.gpuTemp = gpuOk ? gpuTemp : -1;
+        if (outputStr.contains("CPU:") && outputStr.contains("GPU:")) {
+            QStringList parts = outputStr.split(',');
+            if (parts.length() == 2) {
+                QString cpuTempStr = parts[0].mid(4); // Remove "CPU:"
+                QString gpuTempStr = parts[1].mid(4); // Remove "GPU:"
+                
+                bool cpuOk, gpuOk;
+                double cpuTemp = cpuTempStr.toDouble(&cpuOk);
+                double gpuTemp = gpuTempStr.toDouble(&gpuOk);
+                
+                m_sysInfo.cpuTemp = cpuOk ? cpuTemp : -1;
+                m_sysInfo.gpuTemp = gpuOk ? gpuTemp : -1;
+                
+                if (cpuOk && cpuTemp > 0) {
+                    qDebug() << "Successfully read CPU temperature:" << cpuTemp << "°C";
+                } else {
+                    qDebug() << "Failed to read valid CPU temperature, raw value:" << cpuTempStr;
+                }
+                
+                if (gpuOk && gpuTemp > 0) {
+                    qDebug() << "Successfully read GPU temperature:" << gpuTemp << "°C";
+                } else {
+                    qDebug() << "Failed to read valid GPU temperature, raw value:" << gpuTempStr;
+                }
+            } else {
+                qWarning() << "Failed to parse TempReader output (wrong format):" << outputStr;
+                m_sysInfo.cpuTemp = -1;
+                m_sysInfo.gpuTemp = -1;
+            }
         } else {
-            qWarning() << "Failed to parse TempReader output:" << outputStr;
+            qWarning() << "TempReader output doesn't contain expected format:" << outputStr;
             m_sysInfo.cpuTemp = -1;
             m_sysInfo.gpuTemp = -1;
         }
     } else {
         qWarning() << "TempReader.exe failed or crashed. Exit code:" << exitCode << "Status:" << exitStatus;
-        qWarning() << "Stderr:" << m_tempReaderProcess->readAllStandardError();
+        QByteArray errorOutput = m_tempReaderProcess->readAllStandardError();
+        if (!errorOutput.isEmpty()) {
+            qWarning() << "TempReader stderr:" << errorOutput;
+        }
         m_sysInfo.cpuTemp = -1;
         m_sysInfo.gpuTemp = -1;
     }
