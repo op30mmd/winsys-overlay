@@ -67,26 +67,28 @@ jobs:
         if: env.UPX_PATH != ''
         run: |
           echo "--- Reducing package size by removing unnecessary files ---"
-          del /q /s build\Release\*.pdb > nul 2>&1
-          if exist build\Release\translations rmdir /s /q build\Release\translations
-          if exist build\Release\opengl32sw.dll del /q build\Release\opengl32sw.dll
-          if exist build\Release\Qt6Qml*.dll del /q build\Release\Qt6Qml*.dll
-          if exist build\Release\Qt6Quick*.dll del /q build\Release\Qt6Quick*.dll
-          if exist build\Release\Qt6WebEngine*.dll del /q build\Release\Qt6WebEngine*.dll
-          if exist build\Release\QtWebEngineProcess.exe del /q build\Release\QtWebEngineProcess.exe
+          del /q /s build\bin\*.pdb > nul 2>&1
+          if exist build\bin\translations rmdir /s /q build\bin\translations
+          if exist build\bin\opengl32sw.dll del /q build\bin\opengl32sw.dll
+          if exist build\bin\Qt6Qml*.dll del /q build\bin\Qt6Qml*.dll
+          if exist build\bin\Qt6Quick*.dll del /q build\bin\Qt6Quick*.dll
+          if exist build\bin\Qt6WebEngine*.dll del /q build\bin\Qt6WebEngine*.dll
+          if exist build\bin\QtWebEngineProcess.exe del /q build\bin\QtWebEngineProcess.exe
 
           echo "--- Compressing executables with UPX ---"
           echo "Compressing main executable..."
-          "%UPX_PATH%" --best --lzma build/Release/winsys-overlay.exe
+          "%UPX_PATH%" --best --lzma build/bin/winsys-overlay.exe
+          echo "Compressing helper executable..."
+          "%UPX_PATH%" --best --lzma build/bin/TempReader.exe
           echo "Compressing DLLs (forcing due to GUARD_CF)..."
-          "%UPX_PATH%" --best --lzma --force build/Release/*.dll
+          "%UPX_PATH%" --best --lzma --force build/bin/*.dll
         shell: cmd
 
       - name: Package Release Files
         id: package
         run: |
           $archiveName = "winsys-overlay-${{ steps.get_version.outputs.VERSION }}.zip"
-          Compress-Archive -Path build/Release/* -DestinationPath $archiveName -Force
+          Compress-Archive -Path build/bin/* -DestinationPath $archiveName -Force
           "ARCHIVE_NAME=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: powershell
 
