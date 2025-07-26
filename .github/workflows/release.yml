@@ -47,6 +47,11 @@ jobs:
           cmake --build build --config Release
         shell: cmd
 
+      - name: Deploy Qt Dependencies
+        run: |
+          %QT_DIR%\bin\windeployqt.exe --release --no-translations --no-opengl-sw --no-system-d3d-compiler build/bin/Release/winsys-overlay.exe
+        shell: cmd
+
       - name: Optimize and Compress Release Files
         if: env.UPX_PATH != ''
         run: |

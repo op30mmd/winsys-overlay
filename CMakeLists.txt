@@ -54,18 +54,3 @@ target_link_libraries(winsys-overlay PRIVATE
 
 # --- Deployment ---
 
-if(WIN32)
-    # Standard windeployqt logic
-    find_program(WINDEPLOYQT_EXECUTABLE windeployqt PATHS ${CMAKE_PREFIX_PATH}/bin NO_DEFAULT_PATH)
-    if(NOT WINDEPLOYQT_EXECUTABLE)
-        message(FATAL_ERROR "windeployqt.exe not found!")
-    endif()
-
-    add_custom_command(TARGET winsys-overlay POST_BUILD
-        COMMAND ${WINDEPLOYQT_EXECUTABLE}
-            --release --no-translations --no-opengl-sw --no-system-d3d-compiler
-            --dir "$<TARGET_FILE_DIR:winsys-overlay>"
-            "$<TARGET_FILE:winsys-overlay>"
-        COMMENT "Running windeployqt..."
-    )
-endif()
