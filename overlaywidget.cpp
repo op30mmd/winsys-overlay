@@ -429,65 +429,65 @@ OverlayWidget::~OverlayWidget()
 
 void OverlayWidget::updateStats(const SysInfo &info)
 {
-    // Original metrics
-    m_cpuLabel->setText(QString("CPU: %1%").arg(info.cpuLoad, 0, 'f', 1));
-    m_memLabel->setText(QString("MEM: %1%").arg(info.memUsage));
+    // Original metrics - use QString::number for better compatibility
+    m_cpuLabel->setText(QString("CPU: %1%").arg(QString::number(info.cpuLoad, 'f', 1)));
+    m_memLabel->setText(QString("MEM: %1%").arg(QString::number(info.memUsage)));
     m_ramLabel->setText(QString("RAM: %1/%2 MB").arg(QString::number(info.totalRamMB - info.availRamMB)).arg(QString::number(info.totalRamMB)));
-    m_diskLabel->setText(QString("DSK: %1%").arg(info.diskLoad, 0, 'f', 1));
-    m_gpuLabel->setText(QString("GPU: %1%").arg(info.gpuLoad, 0, 'f', 1));
+    m_diskLabel->setText(QString("DSK: %1%").arg(QString::number(info.diskLoad, 'f', 1)));
+    m_gpuLabel->setText(QString("GPU: %1%").arg(QString::number(info.gpuLoad, 'f', 1)));
 
     // Network metrics with better formatting
     if (info.networkDownloadSpeed >= 1.0) {
-        m_netDownLabel->setText(QString("↓: %1 MB/s").arg(info.networkDownloadSpeed, 0, 'f', 2));
+        m_netDownLabel->setText(QString("↓: %1 MB/s").arg(QString::number(info.networkDownloadSpeed, 'f', 2)));
     } else if (info.networkDownloadSpeed >= 0.001) {
-        m_netDownLabel->setText(QString("↓: %1 KB/s").arg(info.networkDownloadSpeed * 1024, 0, 'f', 1));
+        m_netDownLabel->setText(QString("↓: %1 KB/s").arg(QString::number(info.networkDownloadSpeed * 1024, 'f', 1)));
     } else {
         m_netDownLabel->setText("↓: 0.00 KB/s");
     }
     
     if (info.networkUploadSpeed >= 1.0) {
-        m_netUpLabel->setText(QString("↑: %1 MB/s").arg(info.networkUploadSpeed, 0, 'f', 2));
+        m_netUpLabel->setText(QString("↑: %1 MB/s").arg(QString::number(info.networkUploadSpeed, 'f', 2)));
     } else if (info.networkUploadSpeed >= 0.001) {
-        m_netUpLabel->setText(QString("↑: %1 KB/s").arg(info.networkUploadSpeed * 1024, 0, 'f', 1));
+        m_netUpLabel->setText(QString("↑: %1 KB/s").arg(QString::number(info.networkUploadSpeed * 1024, 'f', 1)));
     } else {
         m_netUpLabel->setText("↑: 0.00 KB/s");
     }
     
     // Daily data usage with better formatting
     if (info.dailyDataUsageMB >= 1024) {
-        m_dailyDataLabel->setText(QString("Daily: %1 GB").arg(info.dailyDataUsageMB / 1024.0, 0, 'f', 2));
+        m_dailyDataLabel->setText(QString("Daily: %1 GB").arg(QString::number(info.dailyDataUsageMB / 1024.0, 'f', 2)));
     } else {
-        m_dailyDataLabel->setText(QString("Daily: %1 MB").arg(info.dailyDataUsageMB, 0, 'f', 0));
+        m_dailyDataLabel->setText(QString("Daily: %1 MB").arg(QString::number(info.dailyDataUsageMB, 'f', 0)));
     }
     
     // Temperature readings
     if (info.cpuTemp >= 0) {
-        m_cpuTempLabel->setText(QString("CPU°: %1°C").arg(info.cpuTemp, 0, 'f', 1));
+        m_cpuTempLabel->setText(QString("CPU°: %1°C").arg(QString::number(info.cpuTemp, 'f', 1)));
     } else {
         m_cpuTempLabel->setText("CPU°: N/A");
     }
     
     if (info.gpuTemp >= 0) {
-        m_gpuTempLabel->setText(QString("GPU°: %1°C").arg(info.gpuTemp, 0, 'f', 1));
+        m_gpuTempLabel->setText(QString("GPU°: %1°C").arg(QString::number(info.gpuTemp, 'f', 1)));
     } else {
         m_gpuTempLabel->setText("GPU°: N/A");
     }
     
     // Process count
-    m_processesLabel->setText(QString("Proc: %1").arg(info.activeProcesses));
+    m_processesLabel->setText(QString("Proc: %1").arg(QString::number(info.activeProcesses)));
     
     // System uptime with better formatting
     if (info.systemUptime < 1) {
-        m_uptimeLabel->setText(QString("Up: %1m").arg(info.systemUptime * 60, 0, 'f', 0));
+        m_uptimeLabel->setText(QString("Up: %1m").arg(QString::number(info.systemUptime * 60, 'f', 0)));
     } else if (info.systemUptime < 24) {
-        m_uptimeLabel->setText(QString("Up: %1h").arg(info.systemUptime, 0, 'f', 1));
+        m_uptimeLabel->setText(QString("Up: %1h").arg(QString::number(info.systemUptime, 'f', 1)));
     } else {
         int days = static_cast<int>(info.systemUptime / 24);
         double remainingHours = info.systemUptime - (days * 24);
         if (remainingHours < 0.1) {
-            m_uptimeLabel->setText(QString("Up: %1d").arg(days));
+            m_uptimeLabel->setText(QString("Up: %1d").arg(QString::number(days)));
         } else {
-            m_uptimeLabel->setText(QString("Up: %1d %2h").arg(days).arg(remainingHours, 0, 'f', 0));
+            m_uptimeLabel->setText(QString("Up: %1d %2h").arg(QString::number(days)).arg(QString::number(remainingHours, 'f', 0)));
         }
     }
 
