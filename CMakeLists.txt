@@ -64,7 +64,7 @@ if(WIN32)
     add_custom_command(TARGET winsys-overlay POST_BUILD
         COMMAND ${WINDEPLOYQT_EXECUTABLE}
             --release --no-translations --no-opengl-sw --no-system-d3d-compiler
-            --dir "$<TARGET_FILE_DIR:winsys-overlay>"
+            --dir "${CMAKE_BINARY_DIR}/bin"
             "$<TARGET_FILE:winsys-overlay>"
         COMMENT "Running windeployqt..."
     )
