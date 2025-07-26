@@ -51,15 +51,15 @@ jobs:
         if: env.UPX_PATH != ''
         run: |
           echo "--- Reducing package size by removing unnecessary files ---"
-          del /q /s build\bin\*.pdb > nul 2>&1
+          del /q /s build\bin\Release\*.pdb > nul 2>&1
 
           echo "--- Compressing native executables and DLLs with UPX ---"
           echo "Compressing main executable..."
-          "%UPX_PATH%" --best --lzma build/bin/winsys-overlay.exe
+          "%UPX_PATH%" --best --lzma build/bin/Release/winsys-overlay.exe
           
           echo "Compressing native DLLs (forcing due to GUARD_CF)..."
-          for %%F in (build\bin\Qt6*.dll) do "%UPX_PATH%" --best --lzma --force "%%F"
-          if exist build\bin\platforms\qwindows.dll "%UPX_PATH%" --best --lzma --force build\bin\platforms\qwindows.dll
+          for %%F in (build\bin\Release\Qt6*.dll) do "%UPX_PATH%" --best --lzma --force "%%F"
+          if exist build\bin\Release\platforms\qwindows.dll "%UPX_PATH%" --best --lzma --force build\bin\Release\platforms\qwindows.dll
 
           echo "Skipping .NET assemblies (TempReader.exe, LibreHardwareMonitorLib.dll) as they are not supported by UPX."
         shell: cmd
@@ -68,7 +68,7 @@ jobs:
         id: package
         run: |
           $archiveName = "winsys-overlay-${{ steps.get_version.outputs.VERSION }}.zip"
-          Compress-Archive -Path build/bin/* -DestinationPath $archiveName -Force
+          Compress-Archive -Path build/bin/Release/* -DestinationPath $archiveName -Force
           "ARCHIVE_NAME=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: powershell
 
