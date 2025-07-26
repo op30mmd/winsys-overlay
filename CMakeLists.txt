@@ -49,7 +49,7 @@ add_executable(winsys-overlay WIN32
 set_property(TARGET winsys-overlay PROPERTY VS_DOTNET_TARGET_FRAMEWORK_VERSION "v4.7.2")
 
 # Tell CMake that this specific file is managed code
-set_source_files_properties(HardwareMonitor.cpp PROPERTIES VS_COMPILE_AS_MANAGED "Managed")
+set_source_files_properties(HardwareMonitor.cpp PROPERTIES COMPILE_FLAGS "/clr")
 
 target_link_libraries(winsys-overlay PRIVATE 
     Qt6::Widgets 
