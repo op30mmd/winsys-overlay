@@ -16,7 +16,7 @@ if(ipo_supported)
 endif()
 
 # Explicitly tell CMake where to find your Qt installation.
-set(CMAKE_PREFIX_PATH "C:/Qt/6.9.1/msvc2022_64" CACHE PATH "Path to Qt installation")
+set(CMAKE_PREFIX_PATH "C:/Qt/6.7.0/msvc2019_64" CACHE PATH "Path to Qt installation")
 message(STATUS "Using CMAKE_PREFIX_PATH: ${CMAKE_PREFIX_PATH}")
 
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
@@ -50,6 +50,8 @@ add_executable(winsys-overlay WIN32
     sysinfomonitor.cpp
     settingsdialog.h
     settingsdialog.cpp
+    nvml.cpp
+    adl.cpp
 )
 
 # Link against required Windows libraries for enhanced monitoring
@@ -59,6 +61,8 @@ target_link_libraries(winsys-overlay PRIVATE
     psapi        # Process Status API
     iphlpapi     # IP Helper API for network stats
     ws2_32       # Windows Sockets API
+    nvml         # NVIDIA Management Library
+    wbemuuid     # WMI
 )
 
 if(WIN32)
