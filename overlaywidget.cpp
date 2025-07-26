@@ -91,20 +91,6 @@ void OverlayWidget::createIcons()
     m_gpuTempIcon = createColoredIcon(":/icons/temp.svg", fontColor);
     m_processesIcon = createColoredIcon(":/icons/processes.svg", fontColor);
     m_uptimeIcon = createColoredIcon(":/icons/uptime.svg", fontColor);
-}chip symbol
-    m_cpuIcon = createColoredIcon(":/icons/cpu.svg", fontColor);
-    
-    // Memory icon - RAM bars
-    m_memIcon = createColoredIcon(":/icons/memory.svg", fontColor);
-    
-    // RAM icon - memory module
-    m_ramIcon = createColoredIcon(":/icons/ram.svg", fontColor);
-    
-    // Disk icon - hard drive
-    m_diskIcon = createColoredIcon(":/icons/disk.svg", fontColor);
-    
-    // GPU icon - graphics card
-    m_gpuIcon = createColoredIcon(":/icons/gpu.svg", fontColor);
 }
 
 QPixmap OverlayWidget::createColoredIcon(const QString& iconPath, const QColor& color, const QSize& size)
@@ -237,45 +223,6 @@ void OverlayWidget::createLayout()
         return widget;
     };
 
-void OverlayWidget::createLayout()
-{
-    // Create the layout and container widgets ONCE
-    QSettings s;
-    QString orientation = s.value("appearance/layoutOrientation", "Vertical").toString();
-    
-    QBoxLayout* mainLayout;
-    if (orientation == "Horizontal") {
-        mainLayout = new QHBoxLayout(this);
-        mainLayout->setSpacing(8);
-    } else { // Default to Vertical
-        mainLayout = new QVBoxLayout(this);
-        mainLayout->setSpacing(2);
-    }
-    mainLayout->setContentsMargins(5, 2, 5, 2);
-
-    // Create horizontal layouts for each metric with icon + text
-    auto createMetricLayout = [this, orientation](QLabel* label, const QPixmap& icon) -> QWidget* {
-        QWidget* widget = new QWidget(this);
-        QHBoxLayout* layout = new QHBoxLayout(widget);
-        layout->setContentsMargins(0, 0, 0, 0);
-        layout->setSpacing(5);
-        
-        QLabel* iconLabel = new QLabel(widget);
-        iconLabel->setPixmap(icon);
-        iconLabel->setFixedSize(16, 16);
-        iconLabel->setScaledContents(true);
-        
-        layout->addWidget(iconLabel);
-        layout->addWidget(label);
-        
-        // Only add stretch in horizontal orientation to prevent icons from spreading out
-        if (orientation == "Horizontal") {
-            layout->addStretch();
-        }
-        
-        return widget;
-    };
-
     // Create container widgets for original metrics
     m_cpuWidget = createMetricLayout(m_cpuLabel, m_cpuIcon);
     m_memWidget = createMetricLayout(m_memLabel, m_memIcon);
@@ -322,7 +269,6 @@ void OverlayWidget::createLayout()
     mainLayout->addWidget(m_gpuTempWidget);
     mainLayout->addWidget(m_processesWidget);
     mainLayout->addWidget(m_uptimeWidget);
-}
 }
 
 void OverlayWidget::loadSettings()
