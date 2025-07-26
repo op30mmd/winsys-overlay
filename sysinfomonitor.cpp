@@ -1,18 +1,34 @@
 #include "sysinfomonitor.h"
+#include <comutil.h>
+#include <comdef.h>
 #include <QDebug>
 #include <QVector>
 #include <QSettings>
+#include <iomanip>
 #include <QStandardPaths>
 #include <QDir>
+#include <netioapi.h>
 
 SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
 {
     m_cpuQuery = nullptr;
     m_diskQuery = nullptr;
     m_gpuQuery = nullptr;
-    m_networkQuery = nullptr;
     m_tempQuery = nullptr;
+    m_pLocator = nullptr;
+    m_pServices = nullptr;
+    m_iAdlAdapterCount = 0;
+    m_lpAdlAdapterInfo = nullptr;
     
+    nvmlInit_v2();
+    if (adl_init() == 0) {
+        adl_adapter_numberofadapters_get(&m_iAdlAdapterCount);
+        if (m_iAdlAdapterCount > 0) {
+            m_lpAdlAdapterInfo = (LPAdapterInfo)malloc(sizeof(AdapterInfo) * m_iAdlAdapterCount);
+            adl_adapter_adapterinfo_get(m_lpAdlAdapterInfo, sizeof(AdapterInfo) * m_iAdlAdapterCount);
+        }
+    }
+
     // Initialize network tracking
     m_lastBytesReceived = 0;
     m_lastBytesSent = 0;
@@ -72,30 +88,56 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
         m_gpuQuery = nullptr;
     }
 
-    // Initialize network counters
-    initializeNetworkCounters();
+    // Initialize WMI
+    HRESULT hres;
 
-    // Initialize temperature monitoring
-    if (PdhOpenQuery(nullptr, 0, &m_tempQuery) == ERROR_SUCCESS) {
-        // Try to add CPU temperature counters (may not be available on all systems)
-        const wchar_t* cpuTempPath = L"\\Thermal Zone Information(*)\\Temperature";
-        DWORD tempBufferSize = 0;
-        if (PdhExpandWildCardPathW(nullptr, cpuTempPath, nullptr, &tempBufferSize, 0) == PDH_MORE_DATA) {
-            QVector<wchar_t> tempPathBuffer(tempBufferSize);
-            if (PdhExpandWildCardPathW(nullptr, cpuTempPath, tempPathBuffer.data(), &tempBufferSize, 0) == ERROR_SUCCESS) {
-                for (const wchar_t* p = tempPathBuffer.data(); *p != L'\0'; p += wcslen(p) + 1) {
-                    PDH_HCOUNTER tempCounter;
-                    if (PdhAddEnglishCounterW(m_tempQuery, p, 0, &tempCounter) == ERROR_SUCCESS) {
-                        m_cpuTempCounters.append(tempCounter);
-                    }
+    hres = CoInitializeEx(0, COINIT_MULTITHREADED);
+    if (FAILED(hres)) {
+        qWarning() << "Failed to initialize COM library. Error code = 0x" << hex << hres;
+    } else {
+        hres = CoInitializeSecurity(
+            NULL,
+            -1,
+            NULL,
+            NULL,
+            RPC_C_AUTHN_LEVEL_DEFAULT,
+            RPC_C_IMP_LEVEL_IMPERSONATE,
+            NULL,
+            EOAC_NONE,
+            NULL
+        );
+
+        if (FAILED(hres)) {
+            qWarning() << "Failed to initialize security. Error code = 0x" << hex << hres;
+            CoUninitialize();
+        } else {
+            hres = CoCreateInstance(
+                CLSID_WbemLocator,
+                0,
+                CLSCTX_INPROC_SERVER,
+                IID_IWbemLocator, (LPVOID*)&m_pLocator);
+
+            if (FAILED(hres)) {
+                qWarning() << "Failed to create IWbemLocator object. Error code = 0x" << hex << hres;
+                CoUninitialize();
+            } else {
+                hres = m_pLocator->ConnectServer(
+                    _bstr_t(L"ROOT\\WMI"),
+                    NULL,
+                    NULL,
+                    0,
+                    NULL,
+                    0,
+                    0,
+                    &m_pServices
+                );
+
+                if (FAILED(hres)) {
+                    qWarning() << "Could not connect to WMI namespace. Error code = 0x" << hex << hres;
+                    m_pLocator->Release();
+                    CoUninitialize();
                 }
             }
-        }
-        
-        if (!m_cpuTempCounters.isEmpty()) {
-            PdhCollectQueryData(m_tempQuery);
-        } else {
-            qDebug() << "Temperature counters not available on this system.";
         }
     }
 
@@ -104,44 +146,6 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
     m_timer->start(1000);
 
     updateStats();
-}
-
-void SysInfoMonitor::initializeNetworkCounters()
-{
-    if (PdhOpenQuery(nullptr, 0, &m_networkQuery) == ERROR_SUCCESS) {
-        // Try to add network interface counters
-        const wchar_t* networkPaths[] = {
-            L"\\Network Interface(*)\\Bytes Received/sec",
-            L"\\Network Interface(*)\\Bytes Sent/sec"
-        };
-        
-        for (const wchar_t* path : networkPaths) {
-            DWORD bufferSize = 0;
-            if (PdhExpandWildCardPathW(nullptr, path, nullptr, &bufferSize, 0) == PDH_MORE_DATA) {
-                QVector<wchar_t> pathBuffer(bufferSize);
-                if (PdhExpandWildCardPathW(nullptr, path, pathBuffer.data(), &bufferSize, 0) == ERROR_SUCCESS) {
-                    for (const wchar_t* p = pathBuffer.data(); *p != L'\0'; p += wcslen(p) + 1) {
-                        QString counterName = QString::fromWCharArray(p);
-                        // Skip loopback and isatap interfaces
-                        if (counterName.contains("Loopback") || counterName.contains("isatap")) {
-                            continue;
-                        }
-                        
-                        PDH_HCOUNTER networkCounter;
-                        if (PdhAddEnglishCounterW(m_networkQuery, p, 0, &networkCounter) == ERROR_SUCCESS) {
-                            if (wcsstr(path, L"Received")) {
-                                m_networkBytesReceivedCounter = networkCounter;
-                            } else {
-                                m_networkBytesSentCounter = networkCounter;
-                            }
-                            break; // Use first valid interface
-                        }
-                    }
-                }
-            }
-        }
-        PdhCollectQueryData(m_networkQuery);
-    }
 }
 
 qint64 SysInfoMonitor::getCurrentDayKey()
@@ -216,8 +220,17 @@ SysInfoMonitor::~SysInfoMonitor()
     if (m_cpuQuery) PdhCloseQuery(m_cpuQuery);
     if (m_diskQuery) PdhCloseQuery(m_diskQuery);
     if (m_gpuQuery) PdhCloseQuery(m_gpuQuery);
-    if (m_networkQuery) PdhCloseQuery(m_networkQuery);
     if (m_tempQuery) PdhCloseQuery(m_tempQuery);
+
+    if (m_pServices) m_pServices->Release();
+    if (m_pLocator) m_pLocator->Release();
+    CoUninitialize();
+
+    if (m_lpAdlAdapterInfo) {
+        free(m_lpAdlAdapterInfo);
+    }
+    adl_shutdown();
+    nvmlShutdown();
 }
 
 void SysInfoMonitor::updateStats()
@@ -270,12 +283,9 @@ void SysInfoMonitor::updateStats()
 
 void SysInfoMonitor::updateNetworkStats(SysInfo& info)
 {
-    if (!m_networkQuery) return;
-
     QDateTime now = QDateTime::currentDateTime();
     qint64 currentDay = getCurrentDayKey();
-    
-    // Check if it's a new day
+
     if (currentDay != m_currentDayKey) {
         saveDailyUsage();
         m_currentDayKey = currentDay;
@@ -283,34 +293,36 @@ void SysInfoMonitor::updateNetworkStats(SysInfo& info)
         m_dailyBytesSent = 0;
     }
 
-    if (PdhCollectQueryData(m_networkQuery) == ERROR_SUCCESS) {
-        PDH_FMT_COUNTERVALUE counterVal;
-        qint64 currentBytesReceived = 0;
-        qint64 currentBytesSent = 0;
+    ULONG bufferSize = 0;
+    GetIfTable2(&bufferSize, nullptr);
+    PMIB_IF_TABLE2 ifTable = (PMIB_IF_TABLE2) new BYTE[bufferSize];
+    if (GetIfTable2(&bufferSize, ifTable) == NO_ERROR) {
+        quint64 totalBytesReceived = 0;
+        quint64 totalBytesSent = 0;
 
-        if (PdhGetFormattedCounterValue(m_networkBytesReceivedCounter, PDH_FMT_LARGE, nullptr, &counterVal) == ERROR_SUCCESS) {
-            currentBytesReceived = counterVal.largeValue;
-        }
-        if (PdhGetFormattedCounterValue(m_networkBytesSentCounter, PDH_FMT_LARGE, nullptr, &counterVal) == ERROR_SUCCESS) {
-            currentBytesSent = counterVal.largeValue;
+        for (ULONG i = 0; i < ifTable->NumEntries; ++i) {
+            MIB_IF_ROW2 ifRow = ifTable->Table[i];
+            if (ifRow.Type == IF_TYPE_ETHERNET_CSMACD || ifRow.Type == IF_TYPE_IEEE80211) {
+                totalBytesReceived += ifRow.InOctets;
+                totalBytesSent += ifRow.OutOctets;
+            }
         }
 
-        // Calculate speeds (bytes per second to MB/s)
         qint64 timeDiffMs = m_lastNetworkUpdate.msecsTo(now);
         if (timeDiffMs > 0 && m_lastBytesReceived > 0) {
             double timeDiffSec = timeDiffMs / 1000.0;
-            info.networkDownloadSpeed = (currentBytesReceived - m_lastBytesReceived) / (1024.0 * 1024.0 * timeDiffSec);
-            info.networkUploadSpeed = (currentBytesSent - m_lastBytesSent) / (1024.0 * 1024.0 * timeDiffSec);
-            
-            // Accumulate daily usage
-            m_dailyBytesReceived += (currentBytesReceived - m_lastBytesReceived);
-            m_dailyBytesSent += (currentBytesSent - m_lastBytesSent);
+            info.networkDownloadSpeed = (totalBytesReceived - m_lastBytesReceived) / (1024.0 * 1024.0 * timeDiffSec);
+            info.networkUploadSpeed = (totalBytesSent - m_lastBytesSent) / (1024.0 * 1024.0 * timeDiffSec);
+
+            m_dailyBytesReceived += (totalBytesReceived - m_lastBytesReceived);
+            m_dailyBytesSent += (totalBytesSent - m_lastBytesSent);
         }
 
-        m_lastBytesReceived = currentBytesReceived;
-        m_lastBytesSent = currentBytesSent;
+        m_lastBytesReceived = totalBytesReceived;
+        m_lastBytesSent = totalBytesSent;
         m_lastNetworkUpdate = now;
     }
+    delete[] (PBYTE)ifTable;
 
     info.dailyDataUsageMB = (m_dailyBytesReceived + m_dailyBytesSent) / (1024 * 1024);
 }
@@ -342,28 +354,78 @@ void SysInfoMonitor::updateFPS(SysInfo& info)
 
 void SysInfoMonitor::updateTemperatures(SysInfo& info)
 {
-    if (!m_tempQuery || m_cpuTempCounters.isEmpty()) {
+    if (m_pServices) {
+        IEnumWbemClassObject* pEnumerator = NULL;
+        HRESULT hres = m_pServices->ExecQuery(
+            bstr_t("WQL"),
+            bstr_t("SELECT * FROM MSAcpi_ThermalZoneTemperature"),
+            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+            NULL,
+            &pEnumerator);
+
+        if (SUCCEEDED(hres)) {
+            IWbemClassObject* pclsObj = NULL;
+            ULONG uReturn = 0;
+            double maxCpuTemp = 0.0;
+
+            while (pEnumerator) {
+                hres = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+                if (0 == uReturn) {
+                    break;
+                }
+
+                VARIANT vtProp;
+                hres = pclsObj->Get(L"CurrentTemperature", 0, &vtProp, 0, 0);
+                if (SUCCEEDED(hres)) {
+                    double temp = (vtProp.uintVal / 10.0) - 273.15;
+                    if (temp > maxCpuTemp) {
+                        maxCpuTemp = temp;
+                    }
+                    VariantClear(&vtProp);
+                }
+                pclsObj->Release();
+            }
+            info.cpuTemp = maxCpuTemp;
+            pEnumerator->Release();
+        }
+    } else {
         info.cpuTemp = 0.0;
-        info.gpuTemp = 0.0;
-        return;
     }
 
-    if (PdhCollectQueryData(m_tempQuery) == ERROR_SUCCESS) {
-        PDH_FMT_COUNTERVALUE counterVal;
-        double maxCpuTemp = 0.0;
-        
-        for (PDH_HCOUNTER tempCounter : m_cpuTempCounters) {
-            if (PdhGetFormattedCounterValue(tempCounter, PDH_FMT_DOUBLE, nullptr, &counterVal) == ERROR_SUCCESS) {
-                // Temperature is typically in Kelvin * 10, convert to Celsius
-                double tempCelsius = (counterVal.doubleValue / 10.0) - 273.15;
-                if (tempCelsius > maxCpuTemp && tempCelsius < 150) { // Sanity check
-                    maxCpuTemp = tempCelsius;
+    unsigned int deviceCount = 0;
+    if (nvmlDeviceGetCount_v2(&deviceCount) == NVML_SUCCESS) {
+        double maxGpuTemp = 0.0;
+        for (unsigned int i = 0; i < deviceCount; i++) {
+            nvmlDevice_t device;
+            if (nvmlDeviceGetHandleByIndex_v2(i, &device) == NVML_SUCCESS) {
+                unsigned int temp;
+                if (nvmlDeviceGetTemperature(device, NVML_TEMPERATURE_GPU, &temp) == NVML_SUCCESS) {
+                    if (temp > maxGpuTemp) {
+                        maxGpuTemp = temp;
+                    }
                 }
             }
         }
-        
-        info.cpuTemp = maxCpuTemp;
-        info.gpuTemp = 0.0; // GPU temp requires different approach, often vendor-specific
+        info.gpuTemp = maxGpuTemp;
+    } else {
+        info.gpuTemp = 0.0;
+    }
+
+    if (m_iAdlAdapterCount > 0) {
+        double maxGpuTemp = 0.0;
+        for (int i = 0; i < m_iAdlAdapterCount; i++) {
+            ADLTemperature adlTemp = { 0 };
+            adlTemp.iSize = sizeof(ADLTemperature);
+            if (adl_overdrive5_temperature_get(m_lpAdlAdapterInfo[i].iAdapterIndex, 0, &adlTemp) == 0) {
+                double temp = adlTemp.iTemperature / 1000.0;
+                if (temp > maxGpuTemp) {
+                    maxGpuTemp = temp;
+                }
+            }
+        }
+        if (maxGpuTemp > info.gpuTemp) {
+            info.gpuTemp = maxGpuTemp;
+        }
     }
 }
 

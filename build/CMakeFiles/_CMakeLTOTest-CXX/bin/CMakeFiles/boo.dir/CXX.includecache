@@ -1,0 +1,9 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform:
+
+/app/build/CMakeFiles/_CMakeLTOTest-CXX/src/main.cpp

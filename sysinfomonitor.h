@@ -12,6 +12,10 @@
 #include <PdhMsg.h>
 #include <iphlpapi.h>
 #include <psapi.h>
+#include <netioapi.h>
+#include "nvml.h"
+#include "adl.h"
+#include <WbemIdl.h>
 #endif
 
 struct SysInfo {
@@ -82,15 +86,18 @@ private:
     PDH_HQUERY m_gpuQuery;
     QList<PDH_HCOUNTER> m_gpuCounters;
     
-    // Network counters
-    PDH_HQUERY m_networkQuery;
-    PDH_HCOUNTER m_networkBytesReceivedCounter;
-    PDH_HCOUNTER m_networkBytesSentCounter;
-    
     // Temperature counters (if available)
     PDH_HQUERY m_tempQuery;
     QList<PDH_HCOUNTER> m_cpuTempCounters;
     QList<PDH_HCOUNTER> m_gpuTempCounters;
+
+    // WMI
+    IWbemLocator* m_pLocator;
+    IWbemServices* m_pServices;
+
+    // ADL
+    int m_iAdlAdapterCount;
+    LPAdapterInfo m_lpAdlAdapterInfo;
 #endif
 };
 
