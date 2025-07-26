@@ -52,5 +52,31 @@ target_link_libraries(winsys-overlay PRIVATE
     pdh psapi iphlpapi ws2_32 wbemuuid
 )
 
-# --- Deployment ---
+# --- Deployment & Installation ---
+
+install(TARGETS winsys-overlay RUNTIME DESTINATION bin)
+
+install(CODE "
+    message(STATUS \"Running windeployqt...\")
+    execute_process(
+        COMMAND ${Qt6_windeployqt_EXECUTABLE} --release --no-translations --dir \"${CMAKE_INSTALL_PREFIX}/bin\" \"$<TARGET_FILE:winsys-overlay>\"
+    )
+")
+
+install(FILES
+    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/TempReader.exe"
+    "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/LibreHardwareMonitorLib.dll"
+    DESTINATION bin
+)
+
+set(CPACK_PACKAGE_NAME \"${PROJECT_NAME}\")
+set(CPACK_PACKAGE_VERSION \"1.0.0\")
+set(CPACK_PACKAGE_VENDOR \"Gemini\")
+set(CPACK_PACKAGE_DESCRIPTION_SUMMARY \"A simple system information overlay for Windows.\")
+set(CPACK_PACKAGE_INSTALL_DIRECTORY \"${PROJECT_NAME}\")
+set(CPACK_GENERATOR \"NSIS\")
+
+include(CPack)
+
+
 

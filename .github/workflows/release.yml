@@ -46,229 +46,60 @@ jobs:
           cmake --build build --config Release
         shell: cmd
 
-      - name: Deploy Qt Dependencies
+      - name: Package with CPack
+        id: package_installer
         run: |
-          echo "=== Deploying Qt dependencies ==="
-          %QT_DIR%\bin\windeployqt.exe --release --no-translations --verbose 2 build/bin/Release/winsys-overlay.exe
-          
-          echo "=== Verifying deployment structure ==="
-          dir build\bin\Release
-          
-          echo "=== Checking platform plugins ==="
-          if exist build\bin\Release\platforms (
-            dir build\bin\Release\platforms
-            if exist build\bin\Release\platforms\qwindows.dll (
-              echo "✓ qwindows.dll found"
-            ) else (
-              echo "✗ qwindows.dll missing"
-            )
-          ) else (
-            echo "✗ platforms directory missing"
+          call "%VCVARS_PATH%"
+          cd build
+          echo "Running CPack to create installer..."
+          cpack -C Release
+          echo "CPack finished. Searching for installer file..."
+          for %%F in (*.exe) do (
+            echo "Found installer: %%F"
+            echo "INSTALLER_NAME=%%F" >> %GITHUB_OUTPUT%
+            goto :found
           )
-          
-          echo "=== Manual platform plugin deployment ==="
-          if not exist build\bin\Release\platforms mkdir build\bin\Release\platforms
-          copy "%QT_DIR%\plugins\platforms\qwindows.dll" build\bin\Release\platforms\
-          copy "%QT_DIR%\plugins\platforms\qminimal.dll" build\bin\Release\platforms\
-          
-          echo "=== Copying additional required DLLs ==="
-          copy "%QT_DIR%\bin\Qt6Core.dll" build\bin\Release\
-          copy "%QT_DIR%\bin\Qt6Gui.dll" build\bin\Release\
-          copy "%QT_DIR%\bin\Qt6Widgets.dll" build\bin\Release\
-          
-          echo "=== Final verification ==="
-          dir build\bin\Release
-          dir build\bin\Release\platforms
+          echo "ERROR: CPack installer *.exe not found in build directory!"
+          exit /b 1
+          :found
         shell: cmd
 
-      - name: Test Application Launch
-        run: |
-          echo "=== Testing application launch ==="
-          cd build\bin\Release
-          echo "Current directory:"
-          cd
-          echo "Files in directory:"
-          dir
-          echo "Attempting to launch application for 3 seconds..."
-          start /wait /b winsys-overlay.exe &
-          timeout /t 3 /nobreak > nul
-          taskkill /f /im winsys-overlay.exe > nul 2>&1 || echo "Application may have already closed"
-          echo "Application test completed"
-        shell: cmd
-        continue-on-error: true
+      - name: Upload Installer Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: winsys-overlay-installer
+          path: build/${{ steps.package_installer.outputs.INSTALLER_NAME }}
 
-      - name: Get Pre-compression Size
-        run: |
-          echo "=== Pre-compression size analysis ==="
-          cd build\bin\Release
-          powershell -Command "Get-ChildItem -Recurse | Measure-Object -Property Length -Sum | ForEach-Object { 'Total size: {0:N0} bytes ({1:N2} MB)' -f $_.Sum, ($_.Sum / 1MB) }"
-        shell: cmd
-
-      - name: Optimize and Compress Release Files
-        if: env.UPX_PATH != ''
-        run: |
-          echo "--- Reducing package size by removing unnecessary files ---"
-          del /q /s build\bin\Release\*.pdb > nul 2>&1
-
-          echo "--- Compressing ONLY the main executable (Qt DLLs cause issues with UPX) ---"
-          echo "Compressing main executable..."
-          "%UPX_PATH%" --best --lzma build/bin/Release/winsys-overlay.exe
-          
-          echo "--- Skipping Qt DLL compression (causes crashes) ---"
-          echo "Qt6Core.dll - SKIPPED (UPX breaks Qt6 DLLs)"
-          echo "Qt6Gui.dll - SKIPPED (UPX breaks Qt6 DLLs)" 
-          echo "Qt6Widgets.dll - SKIPPED (UPX breaks Qt6 DLLs)"
-          
-          echo "--- Skipping platform plugin compression (causes crashes) ---"
-          echo "qwindows.dll - SKIPPED (UPX breaks Qt6 platform plugins)"
-          echo "qminimal.dll - SKIPPED (UPX breaks Qt6 platform plugins)"
-          
-          echo "--- Compressing other safe files ---"
-          if exist build\bin\Release\D3Dcompiler_47.dll (
-            echo "Compressing D3Dcompiler_47.dll..."
-            "%UPX_PATH%" --best --lzma build/bin/Release/D3Dcompiler_47.dll
-          )
-          if exist build\bin\Release\opengl32sw.dll (
-            echo "Compressing opengl32sw.dll..."
-            "%UPX_PATH%" --best --lzma build/bin/Release/opengl32sw.dll
-          )
-
-          echo "Skipping .NET assemblies (TempReader.exe, LibreHardwareMonitorLib.dll) as they are not supported by UPX."
-        shell: cmd
-
-      - name: Get Post-compression Size
-        run: |
-          echo "=== Post-compression size analysis ==="
-          cd build\bin\Release
-          powershell -Command "Get-ChildItem -Recurse | Measure-Object -Property Length -Sum | ForEach-Object { 'Total size: {0:N0} bytes ({1:N2} MB)' -f $_.Sum, ($_.Sum / 1MB) }"
-        shell: cmd
-
-      - name: Final Application Test
-        run: |
-          echo "=== Final application test after compression ==="
-          cd build\bin\Release
-          echo "Testing compressed application..."
-          start /wait /b winsys-overlay.exe &
-          timeout /t 3 /nobreak > nul
-          taskkill /f /im winsys-overlay.exe > nul 2>&1 || echo "Application may have already closed"
-          echo "Final test completed"
-        shell: cmd
-        continue-on-error: true
-
-      - name: Package with 7-Zip (High Compression)
+      - name: Compress Installer with 7-Zip
         id: package_7z
+        if: env.SEVENZIP_PATH != '' && startsWith(github.ref, 'refs/tags/')
         run: |
-          echo "=== Creating 7-Zip archive with maximum compression ==="
-          
-          set "VERSION=${{ steps.get_version.outputs.VERSION }}"
-          set "ARCHIVE_7Z_NAME=winsys-overlay-%VERSION%.7z"
-          set "ARCHIVE_ZIP_FALLBACK=winsys-overlay-%VERSION%-fallback.zip"
-          
-          cd build\bin\Release
-          echo "Current directory: %CD%"
-          echo "Creating archive: %ARCHIVE_7Z_NAME%"
-          
-          if exist "%SEVENZIP_PATH%" (
-            echo "Using 7-Zip for maximum compression..."
-            "%SEVENZIP_PATH%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on -mmt=on "..\..\..\%ARCHIVE_7Z_NAME%" *
-            
-            if exist "..\..\..\%ARCHIVE_7Z_NAME%" (
-              echo "=== 7-Zip archive created successfully ==="
-              dir "..\..\..\%ARCHIVE_7Z_NAME%"
-              powershell -Command "$size = (Get-Item '../../../%ARCHIVE_7Z_NAME%').Length; 'Archive size: {0:N0} bytes ({1:N2} MB)' -f $size, ($size / 1MB)"
-              echo ARCHIVE_7Z=%ARCHIVE_7Z_NAME%>>%GITHUB_OUTPUT%
-            ) else (
-              echo "ERROR: 7-Zip archive creation failed!"
-              exit /b 1
-            )
-          ) else (
-            echo "7-Zip not found at %SEVENZIP_PATH%, falling back to PowerShell compression"
-            cd ..\..\..
-            powershell -Command "Compress-Archive -Path 'build/bin/Release/*' -DestinationPath '%ARCHIVE_ZIP_FALLBACK%' -CompressionLevel Optimal -Force"
-            
-            if exist "%ARCHIVE_ZIP_FALLBACK%" (
-              echo "=== Fallback ZIP archive created ==="
-              dir "%ARCHIVE_ZIP_FALLBACK%"
-              echo ARCHIVE_7Z=%ARCHIVE_ZIP_FALLBACK%>>%GITHUB_OUTPUT%
-            ) else (
-              echo "ERROR: Fallback ZIP creation failed!"
-              exit /b 1
-            )
-          )
+          set "INSTALLER_PATH=build\${{ steps.package_installer.outputs.INSTALLER_NAME }}"
+          set "ARCHIVE_7Z_NAME=winsys-overlay-${{ steps.get_version.outputs.VERSION }}.7z"
+          echo "Compressing %INSTALLER_PATH% to %ARCHIVE_7Z_NAME%..."
+          "%SEVENZIP_PATH%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on "%ARCHIVE_7Z_NAME%" "%INSTALLER_PATH%"
+          echo "ARCHIVE_7Z_PATH=%ARCHIVE_7Z_NAME%" >> %GITHUB_OUTPUT%
         shell: cmd
 
-      - name: Package with ZIP (Compatibility)
-        id: package_zip
-        run: |
-          echo "=== Creating ZIP archive for compatibility ==="
-          $archiveName = "winsys-overlay-${{ steps.get_version.outputs.VERSION }}.zip"
-          Write-Host "Creating ZIP archive: $archiveName"
-          
-          try {
-            Compress-Archive -Path "build/bin/Release/*" -DestinationPath $archiveName -CompressionLevel Optimal -Force
-            
-            if (Test-Path $archiveName) {
-              $size = (Get-Item $archiveName).Length
-              Write-Host "ZIP Archive created successfully!"
-              Write-Host "ZIP Archive size: $($size.ToString('N0')) bytes ($([math]::Round($size / 1MB, 2)) MB)"
-              "ARCHIVE_ZIP=$archiveName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-            } else {
-              Write-Error "ZIP archive was not created!"
-              exit 1
-            }
-          } catch {
-            Write-Error "Failed to create ZIP archive: $_"
-            exit 1
-          }
-        shell: powershell
-
-      - name: Compare Archive Sizes
-        run: |
-          echo "=== Archive size comparison ==="
-          
-          set "ARCHIVE_7Z=${{ steps.package_7z.outputs.ARCHIVE_7Z }}"
-          set "ARCHIVE_ZIP=${{ steps.package_zip.outputs.ARCHIVE_ZIP }}"
-          
-          echo "7-Zip archive: %ARCHIVE_7Z%"
-          echo "ZIP archive: %ARCHIVE_ZIP%"
-          
-          if exist "%ARCHIVE_7Z%" if exist "%ARCHIVE_ZIP%" (
-            powershell -Command "try { $size7z = (Get-Item '%ARCHIVE_7Z%').Length; $sizeZip = (Get-Item '%ARCHIVE_ZIP%').Length; $savings = if ($sizeZip -gt 0) { [math]::Round((($sizeZip - $size7z) / $sizeZip) * 100, 1) } else { 0 }; Write-Host '7-Zip: {0:N0} bytes ({1:N2} MB)' -f $size7z, ($size7z / 1MB); Write-Host 'ZIP: {0:N0} bytes ({1:N2} MB)' -f $sizeZip, ($sizeZip / 1MB); Write-Host 'Space saved with 7-Zip: {0}%%' -f $savings } catch { Write-Host 'Error comparing archive sizes: $_' }"
-          ) else (
-            echo "One or both archive files not found for comparison"
-            if exist "%ARCHIVE_7Z%" echo "7-Zip archive exists: %ARCHIVE_7Z%"
-            if exist "%ARCHIVE_ZIP%" echo "ZIP archive exists: %ARCHIVE_ZIP%"
-          )
-        shell: cmd
-
-      - name: Upload 7-Zip Build Artifact
+      - name: Upload Compressed Artifact
+        if: steps.package_7z.outputs.ARCHIVE_7Z_PATH != ''
         uses: actions/upload-artifact@v4
         with:
-          name: winsys-overlay-build-7z
-          path: ${{ steps.package_7z.outputs.ARCHIVE_7Z }}
-        if: steps.package_7z.outputs.ARCHIVE_7Z != ''
-
-      - name: Upload ZIP Build Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: winsys-overlay-build-zip
-          path: ${{ steps.package_zip.outputs.ARCHIVE_ZIP }}
-        if: steps.package_zip.outputs.ARCHIVE_ZIP != ''
+          name: winsys-overlay-7z
+          path: ${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ steps.package_7z.outputs.ARCHIVE_7Z }}
-            ${{ steps.package_zip.outputs.ARCHIVE_ZIP }}
+            build/${{ steps.package_installer.outputs.INSTALLER_NAME }}
+            ${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           body: |
             Automated release for version ${{ github.ref_name }}.
             
-            ## Download Options:
-            - **🗜️ winsys-overlay-${{ github.ref_name }}.7z** - Smallest size (7-Zip format, maximum compression)
-            - **📦 winsys-overlay-${{ github.ref_name }}.zip** - Standard ZIP format for compatibility
-            
-            Both archives contain the same files. Choose 7z for smallest download size or ZIP for better compatibility.
+            ## Download Options
+            - **Installer** (`${{ steps.package_installer.outputs.INSTALLER_NAME }}`): The standard, uncompressed installer.
+            - **7-Zip Archive** (`${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}`): The installer in a highly compressed 7z archive for a smaller download.
