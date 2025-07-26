@@ -81,10 +81,11 @@ install(
     COMPONENT Application
 )
 
-# Custom command to run windeployqt and install only necessary Qt files
+# Custom install script to run windeployqt and clean up during CPack install
 install(CODE "
     set(QT_DEPLOY_DIR \"\${CMAKE_INSTALL_PREFIX}/bin\")
-    message(STATUS \"Deploying Qt to: \${QT_DEPLOY_DIR}\")
+    message(STATUS \"Installing to: \${CMAKE_INSTALL_PREFIX}\")
+    message(STATUS \"Qt deploy directory: \${QT_DEPLOY_DIR}\")
     
     # Find windeployqt
     find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS \"${CMAKE_PREFIX_PATH}/bin\")
@@ -92,6 +93,8 @@ install(CODE "
     if(NOT WINDEPLOYQT_EXECUTABLE)
         message(FATAL_ERROR \"windeployqt not found at ${CMAKE_PREFIX_PATH}/bin\")
     endif()
+    
+    message(STATUS \"Found windeployqt at: \${WINDEPLOYQT_EXECUTABLE}\")
     
     # Run windeployqt with minimal options
     execute_process(
@@ -110,60 +113,63 @@ install(CODE "
         ERROR_VARIABLE DEPLOY_ERROR
     )
     
+    message(STATUS \"windeployqt output: \${DEPLOY_OUTPUT}\")
+    
     if(NOT DEPLOY_RESULT EQUAL 0)
-        message(FATAL_ERROR \"windeployqt failed: \${DEPLOY_ERROR}\")
-    endif()
-    
-    message(STATUS \"windeployqt completed successfully\")
-    
-    # Remove any unnecessary Qt DLLs that windeployqt might have copied
-    set(UNNECESSARY_PATTERNS
-        \"Qt6Quick*.dll\"
-        \"Qt6Qml*.dll\" 
-        \"Qt6Network*.dll\"
-        \"Qt6Sql*.dll\"
-        \"Qt6Test*.dll\"
-        \"Qt6WebEngine*.dll\"
-        \"Qt6Multimedia*.dll\"
-        \"opengl32sw.dll\"
-        \"d3dcompiler_*.dll\"
-    )
-    
-    foreach(PATTERN \${UNNECESSARY_PATTERNS})
-        file(GLOB FILES_TO_REMOVE \"\${QT_DEPLOY_DIR}/\${PATTERN}\")
-        foreach(FILE_TO_REMOVE \${FILES_TO_REMOVE})
-            file(REMOVE \"\${FILE_TO_REMOVE}\")
-            get_filename_component(FILENAME \"\${FILE_TO_REMOVE}\" NAME)
-            message(STATUS \"Removed unnecessary file: \${FILENAME}\")
+        message(WARNING \"windeployqt failed with code \${DEPLOY_RESULT}: \${DEPLOY_ERROR}\")
+        message(WARNING \"Continuing without Qt deployment - app may not work without Qt runtime\")
+    else()
+        message(STATUS \"windeployqt completed successfully\")
+        
+        # Remove any unnecessary Qt DLLs that windeployqt might have copied
+        set(UNNECESSARY_PATTERNS
+            \"Qt6Quick*.dll\"
+            \"Qt6Qml*.dll\" 
+            \"Qt6Network*.dll\"
+            \"Qt6Sql*.dll\"
+            \"Qt6Test*.dll\"
+            \"Qt6WebEngine*.dll\"
+            \"Qt6Multimedia*.dll\"
+            \"opengl32sw.dll\"
+            \"d3dcompiler_*.dll\"
+        )
+        
+        foreach(PATTERN \${UNNECESSARY_PATTERNS})
+            file(GLOB FILES_TO_REMOVE \"\${QT_DEPLOY_DIR}/\${PATTERN}\")
+            foreach(FILE_TO_REMOVE \${FILES_TO_REMOVE})
+                file(REMOVE \"\${FILE_TO_REMOVE}\")
+                get_filename_component(FILENAME \"\${FILE_TO_REMOVE}\" NAME)
+                message(STATUS \"Removed unnecessary file: \${FILENAME}\")
+            endforeach()
         endforeach()
-    endforeach()
-    
-    # Clean up platform plugins (keep only qwindows.dll)
-    set(PLATFORMS_DIR \"\${QT_DEPLOY_DIR}/platforms\")
-    if(EXISTS \"\${PLATFORMS_DIR}\")
-        file(GLOB PLATFORM_PLUGINS \"\${PLATFORMS_DIR}/*.dll\")
-        foreach(PLUGIN \${PLATFORM_PLUGINS})
-            get_filename_component(PLUGIN_NAME \"\${PLUGIN}\" NAME)
-            if(NOT PLUGIN_NAME STREQUAL \"qwindows.dll\")
-                file(REMOVE \"\${PLUGIN}\")
-                message(STATUS \"Removed platform plugin: \${PLUGIN_NAME}\")
-            endif()
-        endforeach()
-    endif()
-    
-    # Clean up imageformat plugins (keep only essential ones)
-    set(IMAGEFORMATS_DIR \"\${QT_DEPLOY_DIR}/imageformats\")
-    if(EXISTS \"\${IMAGEFORMATS_DIR}\")
-        file(GLOB IMAGE_PLUGINS \"\${IMAGEFORMATS_DIR}/*.dll\")
-        set(KEEP_PLUGINS \"qico.dll\" \"qjpeg.dll\" \"qpng.dll\" \"qgif.dll\")
-        foreach(PLUGIN \${IMAGE_PLUGINS})
-            get_filename_component(PLUGIN_NAME \"\${PLUGIN}\" NAME)
-            list(FIND KEEP_PLUGINS \"\${PLUGIN_NAME}\" FOUND_INDEX)
-            if(FOUND_INDEX EQUAL -1)
-                file(REMOVE \"\${PLUGIN}\")
-                message(STATUS \"Removed image plugin: \${PLUGIN_NAME}\")
-            endif()
-        endforeach()
+        
+        # Clean up platform plugins (keep only qwindows.dll)
+        set(PLATFORMS_DIR \"\${QT_DEPLOY_DIR}/platforms\")
+        if(EXISTS \"\${PLATFORMS_DIR}\")
+            file(GLOB PLATFORM_PLUGINS \"\${PLATFORMS_DIR}/*.dll\")
+            foreach(PLUGIN \${PLATFORM_PLUGINS})
+                get_filename_component(PLUGIN_NAME \"\${PLUGIN}\" NAME)
+                if(NOT PLUGIN_NAME STREQUAL \"qwindows.dll\")
+                    file(REMOVE \"\${PLUGIN}\")
+                    message(STATUS \"Removed platform plugin: \${PLUGIN_NAME}\")
+                endif()
+            endforeach()
+        endif()
+        
+        # Clean up imageformat plugins (keep only essential ones)
+        set(IMAGEFORMATS_DIR \"\${QT_DEPLOY_DIR}/imageformats\")
+        if(EXISTS \"\${IMAGEFORMATS_DIR}\")
+            file(GLOB IMAGE_PLUGINS \"\${IMAGEFORMATS_DIR}/*.dll\")
+            set(KEEP_PLUGINS \"qico.dll\" \"qjpeg.dll\" \"qpng.dll\" \"qgif.dll\")
+            foreach(PLUGIN \${IMAGE_PLUGINS})
+                get_filename_component(PLUGIN_NAME \"\${PLUGIN}\" NAME)
+                list(FIND KEEP_PLUGINS \"\${PLUGIN_NAME}\" FOUND_INDEX)
+                if(FOUND_INDEX EQUAL -1)
+                    file(REMOVE \"\${PLUGIN}\")
+                    message(STATUS \"Removed image plugin: \${PLUGIN_NAME}\")
+                endif()
+            endforeach()
+        endif()
     endif()
     
     # List final contents for verification
@@ -175,6 +181,39 @@ install(CODE "
     endforeach()
     
 " COMPONENT Application)
+set(CPACK_SOURCE_IGNORE_FILES
+    "/build/"
+    "/.git/"
+    "/.github/"
+    "/CMakeFiles/"
+    "CMakeCache.txt"
+    "/*.vcxproj"
+    "/*.sln" 
+    "/Debug/"
+    "/Release/"
+    "/.vs/"
+    "/x64/"
+    "/_CPack_Packages/"
+    "/CPackConfig.cmake"
+    "/CPackSourceConfig.cmake"
+    "/*.dir/"
+)
+
+# Exclude build artifacts from installation
+set(CPACK_IGNORE_FILES
+    "/build/"
+    "/_CPack_Packages/"
+    "/CMakeFiles/"
+    "CMakeCache.txt"
+    "/x64/"
+    "/*.dir/"
+    "/ALL_BUILD.vcxproj"
+    "/ZERO_CHECK.vcxproj"
+    "/PACKAGE.vcxproj"
+    "/INSTALL.vcxproj"
+    "/*.vcxproj.filters"
+    "/*.sln"
+)
 
 # --- CPack Configuration ---
 
