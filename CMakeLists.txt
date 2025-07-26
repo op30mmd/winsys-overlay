@@ -1,3 +1,4 @@
+
 cmake_minimum_required(VERSION 3.16)
 project(WinSysOverlay LANGUAGES CXX)
 
@@ -6,6 +7,9 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+
+# Enable C++/CLI support
+set_property(GLOBAL PROPERTY USE_MSVC_RUNTIME_LIBRARY_DLL ON)
 
 # Enable Link-Time Optimization (LTO) for smaller executables
 include(CheckIPOSupported)
@@ -50,7 +54,12 @@ add_executable(winsys-overlay WIN32
     sysinfomonitor.cpp
     settingsdialog.h
     settingsdialog.cpp
+    HardwareMonitor.h
+    HardwareMonitor.cpp
 )
+
+# Enable /clr for the C++/CLI wrapper
+set_source_files_properties(HardwareMonitor.cpp PROPERTIES COMPILE_FLAGS "/clr")
 
 # Link against required Windows libraries for enhanced monitoring
 target_link_libraries(winsys-overlay PRIVATE 

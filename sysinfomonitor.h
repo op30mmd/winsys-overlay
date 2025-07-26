@@ -5,6 +5,8 @@
 #include <QTimer>
 #include <QString>
 #include <QDateTime>
+#include <QThread>
+#include "HardwareMonitor.h"
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -33,66 +35,30 @@ struct SysInfo {
     double systemUptime;          // System uptime in hours
 };
 
+
 class SysInfoMonitor : public QObject
 {
     Q_OBJECT
 public:
     explicit SysInfoMonitor(QObject *parent = nullptr);
     ~SysInfoMonitor();
-    void setUpdateInterval(int msec);
-    void stopUpdates();
-    void resumeUpdates();
+
+    void start();
+    void stop();
 
 signals:
     void statsUpdated(const SysInfo& info);
 
 private slots:
-    void updateStats();
+    void poll();
 
 private:
-    void initializeNetworkCounters();
-    void updateNetworkStats(SysInfo& info);
-    void updateFPS(SysInfo& info);
-    void updateTemperatures(SysInfo& info);
-    void updateSystemInfo(SysInfo& info);
-    void saveDailyUsage();
-    void loadDailyUsage();
-    qint64 getCurrentDayKey();
+    void initialize();
 
+    QThread* m_thread;
     QTimer* m_timer;
-    
-    // Network tracking
-    qint64 m_lastBytesReceived;
-    qint64 m_lastBytesSent;
-    QDateTime m_lastNetworkUpdate;
-    qint64 m_dailyBytesReceived;
-    qint64 m_dailyBytesSent;
-    qint64 m_currentDayKey;
-    
-    // FPS tracking
-    QDateTime m_lastFpsUpdate;
-    int m_frameCount;
-    double m_currentFps;
-    
-#ifdef Q_OS_WIN
-    PDH_HQUERY m_cpuQuery;
-    PDH_HCOUNTER m_cpuTotalCounter;
-    PDH_HQUERY m_diskQuery;
-    PDH_HCOUNTER m_diskTotalCounter;
-    PDH_HQUERY m_gpuQuery;
-    QList<PDH_HCOUNTER> m_gpuCounters;
-    
-    // Network counters
-    PDH_HQUERY m_networkQuery;
-    QList<PDH_HCOUNTER> m_networkBytesReceivedCounters;
-    QList<PDH_HCOUNTER> m_networkBytesSentCounters;
-    
-    // Temperature counters (if available)
-    PDH_HQUERY m_tempQuery;
-    QList<PDH_HCOUNTER> m_cpuTempCounters;
-    QList<PDH_HCOUNTER> m_gpuTempCounters;
-
-    #endif
+    HardwareMonitor* m_hardwareMonitor;
+    SysInfo m_sysInfo;
 };
 
 #endif // SYSINFOMONITOR_H

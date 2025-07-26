@@ -31,7 +31,8 @@ OverlayWidget::OverlayWidget(QWidget *parent)
     createLayout();
     loadSettings();
 
-    connect(m_monitor, &SysInfoMonitor::statsUpdated, this, &OverlayWidget::updateStats);
+    connect(m_monitor, &SysInfoMonitor::statsUpdated, this, &OverlayWidget::updateStats, Qt::QueuedConnection);
+    m_monitor->start();
 }
 
 void OverlayWidget::setupUi()
@@ -349,7 +350,7 @@ void OverlayWidget::loadSettings()
     }
 
     // Behavior
-    m_monitor->setUpdateInterval(s.value("behavior/updateInterval", 1000).toInt());
+    // The update interval is now handled by the SysInfoMonitor itself
 
     adjustSize();
     update(); // Trigger a repaint
@@ -413,13 +414,13 @@ void OverlayWidget::applySettings()
 
 void OverlayWidget::openSettingsDialog()
 {
-    m_monitor->stopUpdates(); // Stop updates to prevent interference with the dialog
+    m_monitor->stop(); // Stop the background thread
 
     SettingsDialog dialog(this);
     connect(&dialog, &SettingsDialog::settingsApplied, this, &OverlayWidget::applySettings);
     dialog.exec();
 
-    m_monitor->resumeUpdates(); // Resume updates after the dialog is closed
+    m_monitor->start(); // Restart the background thread
 }
 
 OverlayWidget::~OverlayWidget()
