@@ -3,8 +3,10 @@
 #include <QDebug>
 #include <QVector>
 #include <QSettings>
+#include <iomanip>
 #include <QStandardPaths>
 #include <QDir>
+#include <netioapi.h>
 
 SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
 {
