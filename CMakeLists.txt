@@ -47,8 +47,8 @@ add_executable(winsys-overlay WIN32
 # Ensure TempReader is built before the main application
 add_dependencies(winsys-overlay TempReader)
 
-target_link_libraries(winsys-overlay PRIVATE 
-    Qt6::Widgets 
+target_link_libraries(winsys-overlay PRIVATE
+    Qt6::Widgets
     pdh psapi iphlpapi ws2_32 wbemuuid
 )
 
@@ -98,7 +98,8 @@ set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\\\${CPACK_PACKAGE_NAME}.lnk
 
 # Define components for CPack
 set(CPACK_COMPONENTS_ALL Application)
-install(PROGRAMS "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" "${CMAKE_INSTALL_PREFIX}" RENAME "LICENSE.txt" COMPONENT Application)
+# Corrected install command for the license file
+install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" DESTINATION "." RENAME "LICENSE.txt" COMPONENT Application)
 
 
 include(CPack)
