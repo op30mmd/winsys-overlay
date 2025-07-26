@@ -6,6 +6,8 @@
 #include <QProcess>
 #include <QString>
 #include <QDateTime>
+#include <QDate>
+#include <QPair>
 
 #ifdef Q_OS_WIN
 #include <windows.h>
@@ -16,20 +18,20 @@
 #endif
 
 struct SysInfo {
-    double cpuLoad;
-    DWORD memUsage;
-    qint64 totalRamMB;
-    qint64 availRamMB;
-    double diskLoad;
-    double gpuLoad;
-    double fps;
-    double networkDownloadSpeed;
-    double networkUploadSpeed;
-    qint64 dailyDataUsageMB;
-    double cpuTemp;
-    double gpuTemp;
-    int activeProcesses;
-    double systemUptime;
+    double cpuLoad = 0.0;
+    DWORD memUsage = 0;
+    qint64 totalRamMB = 0;
+    qint64 availRamMB = 0;
+    double diskLoad = 0.0;
+    double gpuLoad = 0.0;
+    double fps = 0.0;
+    double networkDownloadSpeed = 0.0;
+    double networkUploadSpeed = 0.0;
+    qint64 dailyDataUsageMB = 0;
+    double cpuTemp = -1.0;
+    double gpuTemp = -1.0;
+    int activeProcesses = 0;
+    double systemUptime = 0.0;
 };
 
 class SysInfoMonitor : public QObject
@@ -52,10 +54,20 @@ private slots:
 private:
     void initializeLegacyCounters();
     void updateLegacyStats(SysInfo& info);
+    void loadDailyDataUsage();
+    void saveDailyDataUsage();
 
     QTimer* m_timer;
     QProcess* m_tempReaderProcess;
     SysInfo m_sysInfo;
+
+    // Daily data tracking
+    qint64 m_dailyDataBytes;
+    QDate m_lastResetDate;
+    
+    // Network speed calculation
+    QPair<double, double> m_lastNetworkBytes; // {download, upload}
+    qint64 m_lastNetworkTime;
 
 #ifdef Q_OS_WIN
     PDH_HQUERY m_cpuQuery;
