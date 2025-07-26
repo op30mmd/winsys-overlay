@@ -112,8 +112,7 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
 void SysInfoMonitor::initializeNetworkCounters()
 {
     if (PdhOpenQuery(nullptr, 0, &m_networkQuery) == ERROR_SUCCESS) {
-        const wchar_t* receivedPath = L"\Network Interface(*)\Bytes Received/sec";
-        const wchar_t* sentPath = L"\Network Interface(*)\Bytes Sent/sec";
+        const wchar_t* receivedPath = L"\\Network Interface(*)\\Bytes Received/sec";        const wchar_t* sentPath = L"\\Network Interface(*)\\Bytes Sent/sec";
 
         auto addCounters = [&](const wchar_t* path, QList<PDH_HCOUNTER>& counterList) {
             DWORD bufferSize = 0;

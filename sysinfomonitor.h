@@ -92,11 +92,7 @@ private:
     QList<PDH_HCOUNTER> m_cpuTempCounters;
     QList<PDH_HCOUNTER> m_gpuTempCounters;
 
-    // Daily data usage
-    qint64 m_dailyBytesReceived;
-    qint64 m_dailyBytesSent;
-    qint64 m_currentDayKey;
-#endif
+    #endif
 };
 
 #endif // SYSINFOMONITOR_H
