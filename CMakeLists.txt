@@ -58,11 +58,14 @@ add_executable(winsys-overlay WIN32
     HardwareMonitor.cpp
 )
 
+# Set exception handling for the whole project to be compatible with /clr
+target_compile_options(winsys-overlay PRIVATE /EHa)
+
+# Enable /clr for the C++/CLI wrapper
+set_source_files_properties(HardwareMonitor.cpp PROPERTIES COMPILE_FLAGS "/clr")
+
 # Set the .NET Framework version for the C++/CLI parts
 set_property(TARGET winsys-overlay PROPERTY VS_DOTNET_TARGET_FRAMEWORK_VERSION "v4.7.2")
-
-# Tell CMake that this specific file is managed code, which handles the /clr flag
-set_source_files_properties(HardwareMonitor.cpp PROPERTIES VS_COMPILE_AS_MANAGED "Managed")
 
 # Link against required Windows libraries for enhanced monitoring
 target_link_libraries(winsys-overlay PRIVATE 
