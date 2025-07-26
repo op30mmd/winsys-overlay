@@ -56,11 +56,14 @@ void HardwareMonitor::close() {
 }
 
 void HardwareMonitor::update() {
-    // This is a visitor that will traverse all hardware and sensors
-    // In LHM, you need to call Accept on the computer object to update the sensor values.
-    // We create a dummy visitor because we don't need to do anything special during the update.
-    Visitor^ visitor = gcnew Visitor();
-    pImpl->computer->Accept(visitor);
+    // To update the sensor values, we need to iterate through the hardware
+    // and call the Update() method on each component.
+    for each (IHardware^ hardware in pImpl->computer->Hardware) {
+        hardware->Update();
+        for each (IHardware^ subHardware in hardware->SubHardware) {
+            subHardware->Update();
+        }
+    }
 }
 
 std::vector<SensorData> HardwareMonitor::getTemperatureSensors() {
