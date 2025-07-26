@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.16)
 project(WinSysOverlay LANGUAGES CXX)
 
@@ -8,9 +7,8 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
-# Set the correct properties for C++/CLI compilation
-set(CMAKE_COMMON_LANGUAGE_RUNTIME_SUPPORT ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHa")
+# Set the correct exception handling model for C++/CLI
+add_compile_options(/EHa)
 
 # Explicitly tell CMake where to find your Qt installation.
 set(CMAKE_PREFIX_PATH "C:/Qt/6.9.1/msvc2022_64" CACHE PATH "Path to Qt installation")
@@ -47,13 +45,10 @@ set_target_properties(winsys-overlay PROPERTIES
     VS_DOTNET_TARGET_FRAMEWORK_VERSION "v4.7.2"
 )
 
-# Mark only the specific file as managed code
+# Explicitly set the compiler flags for the C++/CLI file, including the assembly search path
 set_source_files_properties(HardwareMonitor.cpp PROPERTIES
-    VS_COMPILE_AS_MANAGED "Managed"
+    COMPILE_FLAGS "/clr /AI\"C:/Program Files (x86)/Reference Assemblies/Microsoft/Framework/.NETFramework/v4.7.2\""
 )
-
-# Unset the global property so it doesn't affect other potential targets
-set(CMAKE_COMMON_LANGUAGE_RUNTIME_SUPPORT OFF)
 
 target_link_libraries(winsys-overlay PRIVATE 
     Qt6::Widgets 
