@@ -432,7 +432,7 @@ void OverlayWidget::updateStats(const SysInfo &info)
     // Original metrics
     m_cpuLabel->setText(QString("CPU: %1%").arg(info.cpuLoad, 0, 'f', 1));
     m_memLabel->setText(QString("MEM: %1%").arg(info.memUsage));
-    m_ramLabel->setText(QString("RAM: %1/%2 MB").arg(info.totalRamMB - info.availRamMB).arg(info.totalRamMB));
+    m_ramLabel->setText(QString("RAM: %1/%2 MB").arg(QString::number(info.totalRamMB - info.availRamMB)).arg(QString::number(info.totalRamMB)));
     m_diskLabel->setText(QString("DSK: %1%").arg(info.diskLoad, 0, 'f', 1));
     m_gpuLabel->setText(QString("GPU: %1%").arg(info.gpuLoad, 0, 'f', 1));
 
