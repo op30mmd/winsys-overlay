@@ -54,10 +54,8 @@ target_link_libraries(winsys-overlay PRIVATE
 
 # --- Deployment & Installation ---
 
-# Install the main executable and associate it with the "Application" component
 install(TARGETS winsys-overlay RUNTIME DESTINATION bin COMPONENT Application)
 
-# Use windeployqt to deploy Qt dependencies into the installation directory
 install(CODE "
     message(STATUS \"Running windeployqt...\")
     execute_process(
@@ -65,7 +63,6 @@ install(CODE "
     )
 " COMPONENT Application)
 
-# Install the C# helper application and its dependency
 install(FILES
     "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/TempReader.exe"
     "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/LibreHardwareMonitorLib.dll"
@@ -77,13 +74,14 @@ install(FILES
 
 set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
 set(CPACK_PACKAGE_VERSION "1.0.0")
-# Fix Vendor/Developer name
 set(CPACK_PACKAGE_VENDOR "op30mmd")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A simple system information overlay for Windows.")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")
 set(CPACK_GENERATOR "NSIS")
 
-# Include the license file in the installer
+# Set a predictable installer filename without spaces
+set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-win64")
+
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 
 # NSIS specific settings
@@ -98,8 +96,6 @@ set(CPACK_NSIS_DELETE_ICONS_EXTRA "Delete '$DESKTOP\\\\${CPACK_PACKAGE_NAME}.lnk
 
 # Define components for CPack
 set(CPACK_COMPONENTS_ALL Application)
-# Corrected install command for the license file
 install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE" DESTINATION "." RENAME "LICENSE.txt" COMPONENT Application)
-
 
 include(CPack)
