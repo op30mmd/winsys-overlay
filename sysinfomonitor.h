@@ -7,16 +7,11 @@
 #include <QDateTime>
 
 #ifdef Q_OS_WIN
-#include <winsock2.h>
 #include <windows.h>
 #include <Pdh.h>
 #include <PdhMsg.h>
 #include <iphlpapi.h>
 #include <psapi.h>
-#include "comdef.h"
-#include <Wbemidl.h>
-
-#pragma comment(lib, "wbemuuid.lib")
 #endif
 
 struct SysInfo {
@@ -87,14 +82,15 @@ private:
     PDH_HQUERY m_gpuQuery;
     QList<PDH_HCOUNTER> m_gpuCounters;
     
+    // Network counters
+    PDH_HQUERY m_networkQuery;
+    PDH_HCOUNTER m_networkBytesReceivedCounter;
+    PDH_HCOUNTER m_networkBytesSentCounter;
+    
     // Temperature counters (if available)
     PDH_HQUERY m_tempQuery;
     QList<PDH_HCOUNTER> m_cpuTempCounters;
     QList<PDH_HCOUNTER> m_gpuTempCounters;
-
-    // WMI
-    IWbemLocator* m_pLocator;
-    IWbemServices* m_pServices;
 #endif
 };
 
