@@ -93,8 +93,9 @@ private:
     QList<PDH_HCOUNTER> m_gpuTempCounters;
 
     // Daily data usage
-    qint64 m_initialBytesReceived;
-    qint64 m_initialBytesSent;
+    qint64 m_dailyBytesReceived;
+    qint64 m_dailyBytesSent;
+    qint64 m_currentDayKey;
 #endif
 };
 

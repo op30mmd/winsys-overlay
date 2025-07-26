@@ -27,11 +27,6 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
     m_lastNetworkUpdate = QDateTime::currentDateTime();
     m_currentDayKey = getCurrentDayKey();
     loadDailyUsage();
-    
-    // Initialize FPS tracking
-    m_lastFpsUpdate = QDateTime::currentDateTime();
-    m_frameCount = 0;
-    m_currentFps = 0.0;
 
     // Initialize PDH query for CPU usage
     if (PdhOpenQuery(nullptr, 0, &m_cpuQuery) == ERROR_SUCCESS) {
@@ -117,8 +112,8 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
 void SysInfoMonitor::initializeNetworkCounters()
 {
     if (PdhOpenQuery(nullptr, 0, &m_networkQuery) == ERROR_SUCCESS) {
-        const wchar_t* receivedPath = L"\\Network Interface(*)\\Bytes Received/sec";
-        const wchar_t* sentPath = L"\\Network Interface(*)\\Bytes Sent/sec";
+        const wchar_t* receivedPath = L"\Network Interface(*)\Bytes Received/sec";
+        const wchar_t* sentPath = L"\Network Interface(*)\Bytes Sent/sec";
 
         auto addCounters = [&](const wchar_t* path, QList<PDH_HCOUNTER>& counterList) {
             DWORD bufferSize = 0;
@@ -143,19 +138,6 @@ void SysInfoMonitor::initializeNetworkCounters()
         if (!m_networkBytesReceivedCounters.isEmpty() || !m_networkBytesSentCounters.isEmpty()) {
             PdhCollectQueryData(m_networkQuery);
         }
-    }
-
-    MIB_IFTABLE* ifTable = nullptr;
-    DWORD bufLen = 0;
-    if (GetIfTable(ifTable, &bufLen, FALSE) == ERROR_INSUFFICIENT_BUFFER) {
-        ifTable = (MIB_IFTABLE*)new char[bufLen];
-        if (GetIfTable(ifTable, &bufLen, FALSE) == NO_ERROR) {
-            for (DWORD i = 0; i < ifTable->dwNumEntries; ++i) {
-                m_initialBytesReceived += ifTable->table[i].dwInOctets;
-                m_initialBytesSent += ifTable->table[i].dwOutOctets;
-            }
-        }
-        delete[] ifTable;
     }
 }
 
@@ -303,49 +285,36 @@ void SysInfoMonitor::updateNetworkStats(SysInfo& info)
         info.networkUploadSpeed = getCounterValue(m_networkBytesSentCounters) / (1024.0 * 1024.0);
     }
 
-    qint64 currentBytesReceived = 0;
-    qint64 currentBytesSent = 0;
+    qint64 currentDayKey = getCurrentDayKey();
+    if (m_currentDayKey != currentDayKey) {
+        m_dailyBytesReceived = 0;
+        m_dailyBytesSent = 0;
+        m_currentDayKey = currentDayKey;
+    }
+
     MIB_IFTABLE* ifTable = nullptr;
     DWORD bufLen = 0;
     if (GetIfTable(ifTable, &bufLen, FALSE) == ERROR_INSUFFICIENT_BUFFER) {
         ifTable = (MIB_IFTABLE*)new char[bufLen];
         if (GetIfTable(ifTable, &bufLen, FALSE) == NO_ERROR) {
+            qint64 totalReceived = 0;
+            qint64 totalSent = 0;
             for (DWORD i = 0; i < ifTable->dwNumEntries; ++i) {
-                currentBytesReceived += ifTable->table[i].dwInOctets;
-                currentBytesSent += ifTable->table[i].dwOutOctets;
+                totalReceived += ifTable->table[i].dwInOctets;
+                totalSent += ifTable->table[i].dwOutOctets;
             }
+            m_dailyBytesReceived = totalReceived;
+            m_dailyBytesSent = totalSent;
         }
         delete[] ifTable;
     }
 
-    m_dailyBytesReceived = currentBytesReceived - m_initialBytesReceived;
-    m_dailyBytesSent = currentBytesSent - m_initialBytesSent;
     info.dailyDataUsageMB = (m_dailyBytesReceived + m_dailyBytesSent) / (1024 * 1024);
 }
 
 void SysInfoMonitor::updateFPS(SysInfo& info)
 {
-    // Simple FPS estimation based on system performance
-    // This is a rough estimate - real FPS would require hooking into graphics APIs
-    QDateTime now = QDateTime::currentDateTime();
-    qint64 timeDiff = m_lastFpsUpdate.msecsTo(now);
-    
-    if (timeDiff >= 1000) { // Update every second
-        // Estimate FPS based on GPU load and system performance
-        double estimatedFps = 0.0;
-        if (info.gpuLoad > 0) {
-            // Very rough estimation: assume higher GPU load means gaming/graphics work
-            if (info.gpuLoad > 80) estimatedFps = 30 + (100 - info.gpuLoad) * 3; // High load = lower FPS
-            else if (info.gpuLoad > 50) estimatedFps = 60 + (80 - info.gpuLoad);
-            else if (info.gpuLoad > 20) estimatedFps = 120 - info.gpuLoad;
-            else estimatedFps = 0; // Idle
-        }
-        
-        m_currentFps = estimatedFps;
-        m_lastFpsUpdate = now;
-    }
-    
-    info.fps = m_currentFps;
+    info.fps = -1.0; // Use a special value to indicate N/A
 }
 
 void SysInfoMonitor::updateTemperatures(SysInfo& info)
@@ -367,36 +336,33 @@ void SysInfoMonitor::updateTemperatures(SysInfo& info)
     }
 
     hres = pSvc->ExecQuery(bstr_t("WQL"), bstr_t("SELECT * FROM MSAcpi_ThermalZoneTemperature"), WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY, NULL, &pEnumerator);
-    if (FAILED(hres)) {
-        pSvc->Release();
-        pLoc->Release();
-        return;
+    if (SUCCEEDED(hres)) {
+        IWbemClassObject* pclsObj = NULL;
+        ULONG uReturn = 0;
+        double maxCpuTemp = 0.0;
+        while (pEnumerator)
+        {
+            HRESULT hr = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
+            if (0 == uReturn) break;
+            VARIANT vtProp;
+            hr = pclsObj->Get(L"CurrentTemperature", 0, &vtProp, 0, 0);
+            double tempKelvin = vtProp.uintVal;
+            double tempCelsius = (tempKelvin / 10.0) - 273.15;
+            if (tempCelsius > maxCpuTemp) maxCpuTemp = tempCelsius;
+            VariantClear(&vtProp);
+            pclsObj->Release();
+        }
+        info.cpuTemp = maxCpuTemp;
+        pEnumerator->Release();
     }
-
-    IWbemClassObject* pclsObj = NULL;
-    ULONG uReturn = 0;
-    double maxCpuTemp = 0.0;
-    while (pEnumerator)
-    {
-        HRESULT hr = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
-        if (0 == uReturn) break;
-        VARIANT vtProp;
-        hr = pclsObj->Get(L"CurrentTemperature", 0, &vtProp, 0, 0);
-        double tempKelvin = vtProp.uintVal;
-        double tempCelsius = (tempKelvin / 10.0) - 273.15;
-        if (tempCelsius > maxCpuTemp) maxCpuTemp = tempCelsius;
-        VariantClear(&vtProp);
-        pclsObj->Release();
-    }
-    info.cpuTemp = maxCpuTemp;
 
     pSvc->Release();
     pLoc->Release();
-    pEnumerator->Release();
 
     // GPU Temp (NVAPI/AMD ADL)
     // This part is complex and requires vendor-specific SDKs.
-    // For now, we'll leave it as a placeholder.
+    // For now, we'll display N/A.
+    info.gpuTemp = -1.0; // Use a special value to indicate N/A
 }
 
 
