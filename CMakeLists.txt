@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.26)
 project(WinSysOverlay LANGUAGES CXX)
 
@@ -8,6 +7,11 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
+# Best Practice: Unify all build outputs into a single directory per configuration
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${CMAKE_CFG_INTDIR}")
+
 # Explicitly tell CMake where to find your Qt installation.
 set(CMAKE_PREFIX_PATH "C:/Qt/6.9.1/msvc2022_64" CACHE PATH "Path to Qt installation")
 find_package(Qt6 REQUIRED COMPONENTS Widgets)
@@ -16,9 +20,25 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 
 add_library(HardwareMonitorWrapper SHARED HardwareMonitor.cpp HardwareMonitor.h)
 
+# Set the modern CMake properties for C++/CLI compilation
 set_property(TARGET HardwareMonitorWrapper PROPERTY COMMON_LANGUAGE_RUNTIME "") # Use .NET Framework
 set_property(TARGET HardwareMonitorWrapper PROPERTY DOTNET_TARGET_FRAMEWORK_VERSION "v4.7.2")
 set_property(TARGET HardwareMonitorWrapper PROPERTY VS_PROJECT_IMPORT "${CMAKE_CURRENT_SOURCE_DIR}/winrt.props")
+
+# Find and reference the external LibreHardwareMonitorLib.dll
+find_file(LHM_DLL_PATH LibreHardwareMonitorLib.dll HINTS "${CMAKE_CURRENT_SOURCE_DIR}/libs/lhm")
+if(LHM_DLL_PATH)
+    # Use /FU to reference the .NET assembly at compile time
+    target_compile_options(HardwareMonitorWrapper PRIVATE "/FU${LHM_DLL_PATH}")
+    # Copy the DLL to the output directory for runtime
+    add_custom_command(TARGET HardwareMonitorWrapper POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${LHM_DLL_PATH}"
+        "$<TARGET_FILE_DIR:HardwareMonitorWrapper>"
+    )
+else()
+    message(FATAL_ERROR "LibreHardwareMonitorLib.dll not found!")
+endif()
 
 # --- Main Application ---
 
@@ -32,12 +52,8 @@ add_executable(winsys-overlay WIN32
     settingsdialog.cpp
 )
 
-# Explicitly tell the linker where to find the wrapper's .lib file
-target_link_directories(winsys-overlay PRIVATE
-    $<TARGET_FILE_DIR:HardwareMonitorWrapper>
-)
-
-# Link the main application against the wrapper library
+# The Correct Solution: This automatically handles linker paths for all build configurations.
+# The incorrect target_link_directories has been removed.
 target_link_libraries(winsys-overlay PRIVATE 
     Qt6::Widgets 
     HardwareMonitorWrapper
