@@ -2,8 +2,7 @@
 #include "HardwareMonitor.h"
 #include <msclr/auto_gcroot.h>
 
-// Reference the LHM .NET assembly
-#using <C:\Users\mmd\Documents\winsys-overlay\libs\lhm\LibreHardwareMonitorLib.dll>
+// The /FU compiler flag in CMakeLists.txt handles the assembly reference.
 
 using namespace System;
 using namespace LibreHardwareMonitor::Hardware;
