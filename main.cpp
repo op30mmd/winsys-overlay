@@ -6,6 +6,8 @@
 #include <QCoreApplication>
 #include <QDebug>
 #include <QLibraryInfo>
+#include <QLoggingCategory>
+#include <QFileInfo>
 
 int main(int argc, char *argv[])
 {
