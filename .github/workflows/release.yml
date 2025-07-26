@@ -34,6 +34,9 @@ jobs:
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: powershell
 
+      - name: Setup NSIS
+        uses: joncloud/setup-nsis@v1
+
       - name: Configure CMake
         run: |
           call "%VCVARS_PATH%"
