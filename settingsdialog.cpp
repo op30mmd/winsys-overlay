@@ -13,11 +13,18 @@
 #include <QApplication>
 #include <QLabel>
 #include <QHBoxLayout>
+#include <QScrollArea>
 
 SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 {
     setWindowTitle("Settings");
     setWindowIcon(style()->standardIcon(QStyle::SP_ComputerIcon));
+    resize(500, 700); // Make dialog larger to accommodate more options
+
+    // Create scroll area for the content
+    QScrollArea* scrollArea = new QScrollArea(this);
+    QWidget* scrollContent = new QWidget();
+    QVBoxLayout* scrollLayout = new QVBoxLayout(scrollContent);
 
     // --- Appearance Group ---
     QGroupBox* appearanceGroup = new QGroupBox("🎨 Appearance");
@@ -97,14 +104,20 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     QGroupBox* displayGroup = new QGroupBox("📊 Displayed Information");
     QVBoxLayout* displayLayout = new QVBoxLayout();
     
-    // Create checkboxes with icons
-    QStringList displayNames = {"CPU Load", "Memory Usage %", "RAM Usage (MB)", "Disk Activity", "GPU Load"};
+    // Create checkboxes with icons - now with all metrics
+    QStringList displayNames = {
+        "CPU Load", "Memory Usage %", "RAM Usage (MB)", "Disk Activity", "GPU Load",
+        "FPS (Estimated)", "Network Download Speed", "Network Upload Speed", 
+        "Daily Data Usage", "CPU Temperature", "GPU Temperature", 
+        "Active Processes", "System Uptime"
+    };
+    
     QList<QStyle::StandardPixmap> displayIcons = {
-        QStyle::SP_ComputerIcon,
-        QStyle::SP_DriveHDIcon,
-        QStyle::SP_DriveHDIcon,
-        QStyle::SP_DriveHDIcon,
-        QStyle::SP_ComputerIcon
+        QStyle::SP_ComputerIcon, QStyle::SP_DriveHDIcon, QStyle::SP_DriveHDIcon,
+        QStyle::SP_DriveHDIcon, QStyle::SP_ComputerIcon, QStyle::SP_MediaPlay,
+        QStyle::SP_ArrowDown, QStyle::SP_ArrowUp, QStyle::SP_DriveNetIcon,
+        QStyle::SP_DialogApplyButton, QStyle::SP_DialogApplyButton,
+        QStyle::SP_FileDialogListView, QStyle::SP_BrowserReload
     };
     
     for (int i = 0; i < displayNames.size(); ++i) {
@@ -143,6 +156,18 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
     
     behaviorGroup->setLayout(behaviorLayout);
 
+    // Add groups to scroll layout
+    scrollLayout->addWidget(appearanceGroup);
+    scrollLayout->addWidget(displayGroup);
+    scrollLayout->addWidget(behaviorGroup);
+    scrollLayout->addStretch();
+
+    // Set up scroll area
+    scrollContent->setLayout(scrollLayout);
+    scrollArea->setWidget(scrollContent);
+    scrollArea->setWidgetResizable(true);
+    scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+
     // --- Dialog Buttons ---
     QDialogButtonBox* buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel | QDialogButtonBox::Apply);
     
@@ -158,9 +183,7 @@ SettingsDialog::SettingsDialog(QWidget *parent) : QDialog(parent)
 
     // --- Main Layout ---
     QVBoxLayout* mainLayout = new QVBoxLayout(this);
-    mainLayout->addWidget(appearanceGroup);
-    mainLayout->addWidget(displayGroup);
-    mainLayout->addWidget(behaviorGroup);
+    mainLayout->addWidget(scrollArea);
     mainLayout->addWidget(buttonBox);
 
     loadSettings();
@@ -174,11 +197,23 @@ void SettingsDialog::loadSettings()
     m_backgroundOpacitySpinBox->setValue(s.value("appearance/backgroundOpacity", 120).toInt());
     m_updateIntervalSpinBox->setValue(s.value("behavior/updateInterval", 1000).toInt());
 
-    m_displayChecks[0]->setChecked(s.value("display/showCpu", true).toBool());
-    m_displayChecks[1]->setChecked(s.value("display/showMem", true).toBool());
-    m_displayChecks[2]->setChecked(s.value("display/showRam", true).toBool());
-    m_displayChecks[3]->setChecked(s.value("display/showDisk", true).toBool());
-    m_displayChecks[4]->setChecked(s.value("display/showGpu", true).toBool());
+    // Load display settings for all metrics
+    QStringList settingsKeys = {
+        "display/showCpu", "display/showMem", "display/showRam", "display/showDisk", "display/showGpu",
+        "display/showFps", "display/showNetDown", "display/showNetUp", "display/showDailyData",
+        "display/showCpuTemp", "display/showGpuTemp", "display/showProcesses", "display/showUptime"
+    };
+    
+    QList<bool> defaultValues = {
+        true, true, true, true, true,  // Original metrics default to true
+        false, false, false, false,    // New metrics default to false
+        false, false, false, false
+    };
+
+    for (int i = 0; i < m_displayChecks.size() && i < settingsKeys.size(); ++i) {
+        bool defaultValue = i < defaultValues.size() ? defaultValues[i] : false;
+        m_displayChecks[i]->setChecked(s.value(settingsKeys[i], defaultValue).toBool());
+    }
 }
 
 void SettingsDialog::saveAndApplySettings()
@@ -189,11 +224,16 @@ void SettingsDialog::saveAndApplySettings()
     s.setValue("appearance/backgroundOpacity", m_backgroundOpacitySpinBox->value());
     s.setValue("behavior/updateInterval", m_updateIntervalSpinBox->value());
 
-    s.setValue("display/showCpu", m_displayChecks[0]->isChecked());
-    s.setValue("display/showMem", m_displayChecks[1]->isChecked());
-    s.setValue("display/showRam", m_displayChecks[2]->isChecked());
-    s.setValue("display/showDisk", m_displayChecks[3]->isChecked());
-    s.setValue("display/showGpu", m_displayChecks[4]->isChecked());
+    // Save display settings for all metrics
+    QStringList settingsKeys = {
+        "display/showCpu", "display/showMem", "display/showRam", "display/showDisk", "display/showGpu",
+        "display/showFps", "display/showNetDown", "display/showNetUp", "display/showDailyData",
+        "display/showCpuTemp", "display/showGpuTemp", "display/showProcesses", "display/showUptime"
+    };
+
+    for (int i = 0; i < m_displayChecks.size() && i < settingsKeys.size(); ++i) {
+        s.setValue(settingsKeys[i], m_displayChecks[i]->isChecked());
+    }
 
     emit settingsApplied();
 }
