@@ -1,4 +1,3 @@
-
 cmake_minimum_required(VERSION 3.26)
 project(WinSysOverlay LANGUAGES CXX)
 
@@ -7,6 +6,10 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
+
+# Standardize output directories to avoid linker path issues
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE})
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/${CMAKE_BUILD_TYPE})
 
 # Explicitly tell CMake where to find your Qt installation.
 set(CMAKE_PREFIX_PATH "C:/Qt/6.9.1/msvc2022_64" CACHE PATH "Path to Qt installation")
@@ -30,11 +33,6 @@ add_executable(winsys-overlay WIN32
     sysinfomonitor.cpp
     settingsdialog.h
     settingsdialog.cpp
-)
-
-# Explicitly tell the executable where to find the wrapper library's .lib file
-target_link_directories(winsys-overlay PRIVATE
-    $<TARGET_FILE_DIR:HardwareMonitorWrapper>
 )
 
 # Link the main application against the wrapper library
