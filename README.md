@@ -18,6 +18,11 @@ A comprehensive, lightweight, always-on-top system resource monitor for Windows,
 *   **Active Processes**: Count of running system processes
 *   **System Uptime**: How long the system has been running
 
+### 🌡️ Temperature Monitoring
+*   **CPU Temperature**: Monitors the temperature of the CPU.
+*   **GPU Temperature**: Monitors the temperature of the GPU.
+*   **Vendor Agnostic**: Uses LibreHardwareMonitor to support a wide range of hardware (Intel, AMD, NVIDIA).
+
 ### 🎨 Highly Customizable Interface
 *   **Layout Options**: Choose between vertical or horizontal layout orientations
 *   **Font Customization**: Adjustable font size (8-24px) and color
@@ -69,9 +74,10 @@ Toggle visibility for each metric:
 
 ### Prerequisites
 
-1.  **Visual Studio**: [Download](https://visualstudio.microsoft.com/vs/community/) with "Desktop development with C++" workload
-2.  **CMake**: Download from [cmake.org](https://cmake.org/download/)
-3.  **Qt 6**: Download the [Qt Online Installer](https://www.qt.io/download-qt-installer)
+1.  **Visual Studio**: [Download](https://visualstudio.microsoft.com/vs/community/) with "Desktop development with C++" and ".NET desktop development" workloads.
+2.  **.NET SDK**: [Download](https://dotnet.microsoft.com/download) (version 6.0 or later).
+3.  **CMake**: Download from [cmake.org](https://cmake.org/download/)
+4.  **Qt 6**: Download the [Qt Online Installer](https://www.qt.io/download-qt-installer)
     - Select Qt 6.x version for MSVC 2019/2022 64-bit
     - Ensure **Qt Widgets** module is included
 
@@ -95,8 +101,20 @@ Toggle visibility for each metric:
     cmake .. -DCMAKE_PREFIX_PATH=C:\Qt\6.9.1\msvc2022_64
     ```
 
-4.  **Build the application:**
+4.  **Build the C# Temperature Reader:**
     ```bash
+    cd ../ # Return to the root directory
+    dotnet publish TempReader.csproj -c Release -r win-x64 --self-contained false
+    ```
+    This will create a `TempReader.exe` in `bin/Release/net6.0/win-x64`.
+
+5.  **Copy Dependencies:**
+    - Copy the compiled `TempReader.exe` to the `build/Release` directory.
+    - Copy `libs/lhm/LibreHardwareMonitorLib.dll` to the `build/Release` directory.
+
+6.  **Build the main application:**
+    ```bash
+    cd build # Return to the build directory
     cmake --build . --config Release
     ```
 
@@ -111,7 +129,10 @@ The project includes GitHub Actions workflow for automated building:
 ## Technical Implementation
 
 ### System Monitoring Architecture
-- **Windows PDH API**: Native Performance Data Helper for efficient system metrics
+- **Hybrid C++/C# Approach**: The core application is built with C++ and Qt for performance and a native feel, while temperature monitoring is handled by a separate C# helper process.
+- **LibreHardwareMonitor Integration**: The C# `TempReader.exe` utility uses the `LibreHardwareMonitorLib.dll` to query CPU and GPU temperatures, supporting a wide range of hardware from vendors like Intel, AMD, and NVIDIA.
+- **Inter-Process Communication**: The main C++ application launches `TempReader.exe` in the background, capturing its standard output to retrieve temperature data. This isolates the .NET environment from the main application, minimizing dependencies.
+- **Windows PDH API**: Native Performance Data Helper for efficient system metrics for all other data points.
 - **Multi-Query Design**: Separate PDH queries for CPU, Disk, GPU, Network, and Temperature monitoring
 - **Smart Caching**: Optimized data collection to minimize system impact
 - **Wildcard Counter Expansion**: Automatically detects available GPU engines and network interfaces
