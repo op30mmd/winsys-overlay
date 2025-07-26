@@ -59,7 +59,7 @@ add_executable(winsys-overlay WIN32
 )
 
 # Enable /clr for the C++/CLI wrapper
-set_source_files_properties(HardwareMonitor.cpp PROPERTIES COMPILE_FLAGS "/clr /EHa")
+set_source_files_properties(HardwareMonitor.cpp PROPERTIES COMPILE_FLAGS "/clr /EHa /AI\"C:/Program Files (x86)/Reference Assemblies/Microsoft/Framework/.NETFramework/v4.7.2\"")
 
 # Link against required Windows libraries for enhanced monitoring
 target_link_libraries(winsys-overlay PRIVATE 
