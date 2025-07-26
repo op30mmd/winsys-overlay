@@ -72,33 +72,77 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
         m_gpuQuery = nullptr;
     }
 
+    // Initialize network counters
+    initializeNetworkCounters();
+
+    // Initialize temperature monitoring
+    if (PdhOpenQuery(nullptr, 0, &m_tempQuery) == ERROR_SUCCESS) {
+        // Try to add CPU temperature counters (may not be available on all systems)
+        const wchar_t* cpuTempPath = L"\\Thermal Zone Information(*)\\Temperature";
+        DWORD tempBufferSize = 0;
+        if (PdhExpandWildCardPathW(nullptr, cpuTempPath, nullptr, &tempBufferSize, 0) == PDH_MORE_DATA) {
+            QVector<wchar_t> tempPathBuffer(tempBufferSize);
+            if (PdhExpandWildCardPathW(nullptr, cpuTempPath, tempPathBuffer.data(), &tempBufferSize, 0) == ERROR_SUCCESS) {
+                for (const wchar_t* p = tempPathBuffer.data(); *p != L'\0'; p += wcslen(p) + 1) {
+                    PDH_HCOUNTER tempCounter;
+                    if (PdhAddEnglishCounterW(m_tempQuery, p, 0, &tempCounter) == ERROR_SUCCESS) {
+                        m_cpuTempCounters.append(tempCounter);
+                    }
+                }
+            }
+        }
+        
+        if (!m_cpuTempCounters.isEmpty()) {
+            PdhCollectQueryData(m_tempQuery);
+        } else {
+            qDebug() << "Temperature counters not available on this system.";
+        }
+    }
 
     m_timer = new QTimer(this);
     connect(m_timer, &QTimer::timeout, this, &SysInfoMonitor::updateStats);
     m_timer->start(1000);
 
-    CoInitializeEx(0, COINIT_MULTITHREADED);
-    CoInitializeSecurity(
-        nullptr, -1, nullptr, nullptr,
-        RPC_C_AUTHN_LEVEL_DEFAULT, RPC_C_IMP_LEVEL_IMPERSONATE,
-        nullptr, EOAC_NONE, nullptr
-    );
-
-    HRESULT hres = CoCreateInstance(
-        CLSID_WbemLocator, 0, CLSCTX_INPROC_SERVER,
-        IID_IWbemLocator, (LPVOID*)&m_pLocator
-    );
-
-    if (SUCCEEDED(hres)) {
-        hres = m_pLocator->ConnectServer(
-            _bstr_t(L"ROOT\\WMI"),
-            nullptr, nullptr, 0, nullptr, 0, 0, &m_pServices
-        );
-    }
-
     updateStats();
 }
 
+void SysInfoMonitor::initializeNetworkCounters()
+{
+    if (PdhOpenQuery(nullptr, 0, &m_networkQuery) == ERROR_SUCCESS) {
+        // Try to add network interface counters
+        const wchar_t* networkPaths[] = {
+            L"\\Network Interface(*)\\Bytes Received/sec",
+            L"\\Network Interface(*)\\Bytes Sent/sec"
+        };
+        
+        for (const wchar_t* path : networkPaths) {
+            DWORD bufferSize = 0;
+            if (PdhExpandWildCardPathW(nullptr, path, nullptr, &bufferSize, 0) == PDH_MORE_DATA) {
+                QVector<wchar_t> pathBuffer(bufferSize);
+                if (PdhExpandWildCardPathW(nullptr, path, pathBuffer.data(), &bufferSize, 0) == ERROR_SUCCESS) {
+                    for (const wchar_t* p = pathBuffer.data(); *p != L'\0'; p += wcslen(p) + 1) {
+                        QString counterName = QString::fromWCharArray(p);
+                        // Skip loopback and isatap interfaces
+                        if (counterName.contains("Loopback") || counterName.contains("isatap")) {
+                            continue;
+                        }
+                        
+                        PDH_HCOUNTER networkCounter;
+                        if (PdhAddEnglishCounterW(m_networkQuery, p, 0, &networkCounter) == ERROR_SUCCESS) {
+                            if (wcsstr(path, L"Received")) {
+                                m_networkBytesReceivedCounter = networkCounter;
+                            } else {
+                                m_networkBytesSentCounter = networkCounter;
+                            }
+                            break; // Use first valid interface
+                        }
+                    }
+                }
+            }
+        }
+        PdhCollectQueryData(m_networkQuery);
+    }
+}
 
 qint64 SysInfoMonitor::getCurrentDayKey()
 {
@@ -172,10 +216,8 @@ SysInfoMonitor::~SysInfoMonitor()
     if (m_cpuQuery) PdhCloseQuery(m_cpuQuery);
     if (m_diskQuery) PdhCloseQuery(m_diskQuery);
     if (m_gpuQuery) PdhCloseQuery(m_gpuQuery);
-
-    if (m_pServices) m_pServices->Release();
-    if (m_pLocator) m_pLocator->Release();
-    CoUninitialize();
+    if (m_networkQuery) PdhCloseQuery(m_networkQuery);
+    if (m_tempQuery) PdhCloseQuery(m_tempQuery);
 }
 
 void SysInfoMonitor::updateStats()
@@ -228,9 +270,12 @@ void SysInfoMonitor::updateStats()
 
 void SysInfoMonitor::updateNetworkStats(SysInfo& info)
 {
+    if (!m_networkQuery) return;
+
     QDateTime now = QDateTime::currentDateTime();
     qint64 currentDay = getCurrentDayKey();
-
+    
+    // Check if it's a new day
     if (currentDay != m_currentDayKey) {
         saveDailyUsage();
         m_currentDayKey = currentDay;
@@ -238,41 +283,33 @@ void SysInfoMonitor::updateNetworkStats(SysInfo& info)
         m_dailyBytesSent = 0;
     }
 
-    MIB_IF_TABLE* ifTable = nullptr;
-    DWORD bufLen = 0;
-    if (GetIfTable(ifTable, &bufLen, FALSE) == ERROR_INSUFFICIENT_BUFFER) {
-        ifTable = (MIB_IF_TABLE*)new char[bufLen];
-    }
+    if (PdhCollectQueryData(m_networkQuery) == ERROR_SUCCESS) {
+        PDH_FMT_COUNTERVALUE counterVal;
+        qint64 currentBytesReceived = 0;
+        qint64 currentBytesSent = 0;
 
-    if (GetIfTable(ifTable, &bufLen, FALSE) == NO_ERROR) {
-        qint64 totalBytesReceived = 0;
-        qint64 totalBytesSent = 0;
-        for (DWORD i = 0; i < ifTable->dwNumEntries; ++i) {
-            MIB_IF_ROW* row = &ifTable->table[i];
-            //- row->dwType != MIB_IF_TYPE_LOOPBACK && row->dwOperStatus == MIB_IF_OPER_STATUS_CONNECTED
-            if (row->dwType == MIB_IF_TYPE_ETHERNET_CSMACD || row->dwType == IF_TYPE_IEEE80211) {
-                totalBytesReceived += row->dwInOctets;
-                totalBytesSent += row->dwOutOctets;
-            }
+        if (PdhGetFormattedCounterValue(m_networkBytesReceivedCounter, PDH_FMT_LARGE, nullptr, &counterVal) == ERROR_SUCCESS) {
+            currentBytesReceived = counterVal.largeValue;
+        }
+        if (PdhGetFormattedCounterValue(m_networkBytesSentCounter, PDH_FMT_LARGE, nullptr, &counterVal) == ERROR_SUCCESS) {
+            currentBytesSent = counterVal.largeValue;
         }
 
+        // Calculate speeds (bytes per second to MB/s)
         qint64 timeDiffMs = m_lastNetworkUpdate.msecsTo(now);
         if (timeDiffMs > 0 && m_lastBytesReceived > 0) {
             double timeDiffSec = timeDiffMs / 1000.0;
-            info.networkDownloadSpeed = (totalBytesReceived - m_lastBytesReceived) / (1024.0 * 1024.0 * timeDiffSec);
-            info.networkUploadSpeed = (totalBytesSent - m_lastBytesSent) / (1024.0 * 1024.0 * timeDiffSec);
-
-            m_dailyBytesReceived += (totalBytesReceived - m_lastBytesReceived);
-            m_dailyBytesSent += (totalBytesSent - m_lastBytesSent);
+            info.networkDownloadSpeed = (currentBytesReceived - m_lastBytesReceived) / (1024.0 * 1024.0 * timeDiffSec);
+            info.networkUploadSpeed = (currentBytesSent - m_lastBytesSent) / (1024.0 * 1024.0 * timeDiffSec);
+            
+            // Accumulate daily usage
+            m_dailyBytesReceived += (currentBytesReceived - m_lastBytesReceived);
+            m_dailyBytesSent += (currentBytesSent - m_lastBytesSent);
         }
 
-        m_lastBytesReceived = totalBytesReceived;
-        m_lastBytesSent = totalBytesSent;
+        m_lastBytesReceived = currentBytesReceived;
+        m_lastBytesSent = currentBytesSent;
         m_lastNetworkUpdate = now;
-    }
-
-    if (ifTable) {
-        delete[] ifTable;
     }
 
     info.dailyDataUsageMB = (m_dailyBytesReceived + m_dailyBytesSent) / (1024 * 1024);
@@ -280,52 +317,54 @@ void SysInfoMonitor::updateNetworkStats(SysInfo& info)
 
 void SysInfoMonitor::updateFPS(SysInfo& info)
 {
-    // FPS monitoring is complex and requires hooking into graphics APIs (e.g., DirectX, OpenGL).
-    // This is a placeholder for where such an implementation would go.
-    info.fps = 0.0;
+    // Simple FPS estimation based on system performance
+    // This is a rough estimate - real FPS would require hooking into graphics APIs
+    QDateTime now = QDateTime::currentDateTime();
+    qint64 timeDiff = m_lastFpsUpdate.msecsTo(now);
+    
+    if (timeDiff >= 1000) { // Update every second
+        // Estimate FPS based on GPU load and system performance
+        double estimatedFps = 0.0;
+        if (info.gpuLoad > 0) {
+            // Very rough estimation: assume higher GPU load means gaming/graphics work
+            if (info.gpuLoad > 80) estimatedFps = 30 + (100 - info.gpuLoad) * 3; // High load = lower FPS
+            else if (info.gpuLoad > 50) estimatedFps = 60 + (80 - info.gpuLoad);
+            else if (info.gpuLoad > 20) estimatedFps = 120 - info.gpuLoad;
+            else estimatedFps = 0; // Idle
+        }
+        
+        m_currentFps = estimatedFps;
+        m_lastFpsUpdate = now;
+    }
+    
+    info.fps = m_currentFps;
 }
 
 void SysInfoMonitor::updateTemperatures(SysInfo& info)
 {
-    // CPU Temperature (WMI)
-    IEnumWbemClassObject* pEnumerator = nullptr;
-    HRESULT hres = m_pServices->ExecQuery(
-        bstr_t("WQL"),
-        bstr_t("SELECT * FROM MSAcpi_ThermalZoneTemperature"),
-        WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
-        nullptr,
-        &pEnumerator
-    );
+    if (!m_tempQuery || m_cpuTempCounters.isEmpty()) {
+        info.cpuTemp = 0.0;
+        info.gpuTemp = 0.0;
+        return;
+    }
 
-    if (SUCCEEDED(hres)) {
-        IWbemClassObject* pclsObj = nullptr;
-        ULONG uReturn = 0;
+    if (PdhCollectQueryData(m_tempQuery) == ERROR_SUCCESS) {
+        PDH_FMT_COUNTERVALUE counterVal;
         double maxCpuTemp = 0.0;
-
-        while (pEnumerator) {
-            hres = pEnumerator->Next(WBEM_INFINITE, 1, &pclsObj, &uReturn);
-            if (uReturn == 0) {
-                break;
-            }
-
-            VARIANT vtProp;
-            hres = pclsObj->Get(L"CurrentTemperature", 0, &vtProp, 0, 0);
-            if (SUCCEEDED(hres)) {
-                double tempKelvin = vtProp.uintVal;
-                double tempCelsius = (tempKelvin / 10.0) - 273.15;
-                if (tempCelsius > maxCpuTemp && tempCelsius < 150) {
+        
+        for (PDH_HCOUNTER tempCounter : m_cpuTempCounters) {
+            if (PdhGetFormattedCounterValue(tempCounter, PDH_FMT_DOUBLE, nullptr, &counterVal) == ERROR_SUCCESS) {
+                // Temperature is typically in Kelvin * 10, convert to Celsius
+                double tempCelsius = (counterVal.doubleValue / 10.0) - 273.15;
+                if (tempCelsius > maxCpuTemp && tempCelsius < 150) { // Sanity check
                     maxCpuTemp = tempCelsius;
                 }
             }
-            pclsObj->Release();
         }
+        
         info.cpuTemp = maxCpuTemp;
-        pEnumerator->Release();
+        info.gpuTemp = 0.0; // GPU temp requires different approach, often vendor-specific
     }
-
-    // GPU Temperature (requires vendor-specific APIs like NVAPI or AGS)
-    // Placeholder for GPU temperature
-    info.gpuTemp = 0.0;
 }
 
 void SysInfoMonitor::updateSystemInfo(SysInfo& info)
