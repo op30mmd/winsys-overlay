@@ -1,27 +1,22 @@
 name: Build and Release
-
 on:
   workflow_dispatch: {}
   push:
     tags:
       - 'v*'
-
 env:
   QT_DIR: C:\Qt\6.9.1\msvc2022_64
   VCVARS_PATH: 'C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat'
   UPX_PATH: 'C:\upx\upx.exe'
   SEVENZIP_PATH: 'C:\Program Files\7-Zip\7z.exe'
-
 jobs:
   build-and-release:
     runs-on: self-hosted
     permissions:
       contents: write
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
       - name: Generate Version Number
         id: get_version
         run: |
@@ -33,33 +28,27 @@ jobs:
           }
           "VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
         shell: powershell
-
       - name: Install NSIS via Chocolatey
         run: choco install nsis -y
         shell: cmd
-
       - name: Configure CMake
         run: |
           call "%VCVARS_PATH%"
           cmake -S . -B build -DCMAKE_PREFIX_PATH="%QT_DIR%" -DCMAKE_BUILD_TYPE=Release
         shell: cmd
-
       - name: Build with CMake
         run: |
           call "%VCVARS_PATH%"
           cmake --build build --config Release
         shell: cmd
-      
       - name: Deploy Qt Dependencies (Minimal)
         if: env.QT_DIR != ''
         run: |
           call "%VCVARS_PATH%"
           echo "Deploying minimal Qt dependencies for winsys-overlay.exe..."
           "%QT_DIR%\bin\windeployqt.exe" --release --no-translations --no-system-d3d-compiler --no-opengl-sw --no-compiler-runtime --force build\bin\Release\winsys-overlay.exe
-          
           echo "Cleaning up unnecessary Qt files..."
           cd build\bin\Release
-          
           REM Remove unnecessary Qt modules
           del /Q /F Qt6Quick*.dll 2>nul
           del /Q /F Qt6Qml*.dll 2>nul
@@ -70,28 +59,23 @@ jobs:
           del /Q /F Qt6Multimedia*.dll 2>nul
           del /Q /F opengl32sw.dll 2>nul
           del /Q /F d3dcompiler_*.dll 2>nul
-          
           REM Keep only essential platform plugin
           cd platforms
           for %%f in (*.dll) do if not "%%f"=="qwindows.dll" del "%%f"
           cd ..
-          
           REM Keep only essential image format plugins
           cd imageformats
           for %%f in (*.dll) do (
             if not "%%f"=="qico.dll" if not "%%f"=="qjpeg.dll" if not "%%f"=="qpng.dll" if not "%%f"=="qgif.dll" del "%%f"
           )
           cd ..
-          
           echo "Qt cleanup completed."
         shell: cmd
-
       - name: Compress Executables with UPX (Optional)
         if: env.UPX_PATH != ''
         run: |
           if exist "%UPX_PATH%" (
             echo "Compressing executables with UPX..."
-            
             REM Compress main executable (C++ - usually works well)
             echo "Compressing winsys-overlay.exe..."
             "%UPX_PATH%" --best --lzma build\bin\Release\winsys-overlay.exe && (
@@ -99,7 +83,6 @@ jobs:
             ) || (
               echo "✗ Warning: UPX compression failed for winsys-overlay.exe"
             )
-            
             REM Try to compress TempReader.exe (.NET - might fail)
             echo "Attempting to compress TempReader.exe (.NET executable)..."
             "%UPX_PATH%" --best --lzma --force build\bin\Release\TempReader.exe && (
@@ -107,14 +90,12 @@ jobs:
             ) || (
               echo "✗ Info: UPX compression failed for TempReader.exe (normal for .NET executables)"
             )
-            
             echo "UPX compression process completed (failures are non-critical)."
           ) else (
             echo "UPX not found at %UPX_PATH%, skipping compression."
           )
         shell: cmd
         continue-on-error: true
-
       - name: Package with CPack
         id: package_installer
         run: |
@@ -132,7 +113,6 @@ jobs:
           exit /b 1
           :found
         shell: cmd
-
       - name: Display Package Size
         run: |
           set "INSTALLER_PATH=build\${{ steps.package_installer.outputs.INSTALLER_NAME }}"
@@ -142,13 +122,11 @@ jobs:
             echo "Installer size: !SIZE_MB! MB"
           )
         shell: cmd
-
       - name: Upload Installer Artifact
         uses: actions/upload-artifact@v4
         with:
           name: winsys-overlay-installer
           path: build/${{ steps.package_installer.outputs.INSTALLER_NAME }}
-
       - name: Compress Installer with 7-Zip
         id: package_7z
         if: env.SEVENZIP_PATH != '' && startsWith(github.ref, 'refs/tags/')
@@ -158,7 +136,6 @@ jobs:
           echo "Compressing %INSTALLER_PATH% to %ARCHIVE_7Z_NAME%..."
           "%SEVENZIP_PATH%" a -t7z -m0=lzma2 -mx=9 -mfb=64 -md=32m -ms=on "%ARCHIVE_7Z_NAME%" "%INSTALLER_PATH%"
           echo "ARCHIVE_7Z_PATH=%ARCHIVE_7Z_NAME%" >> %GITHUB_OUTPUT%
-          
           REM Display compressed size
           for %%A in ("%ARCHIVE_7Z_NAME%") do (
             echo "Compressed size: %%~zA bytes"
@@ -166,35 +143,39 @@ jobs:
             echo "Compressed size: !SIZE_MB! MB"
           )
         shell: cmd
-
       - name: Upload Compressed Artifact
         if: steps.package_7z.outputs.ARCHIVE_7Z_PATH != ''
         uses: actions/upload-artifact@v4
         with:
           name: winsys-overlay-7z
           path: ${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}
-
       - name: Prepare Release Files
         if: startsWith(github.ref, 'refs/tags/')
         id: prepare_release
         run: |
           echo "Preparing release files..."
-          
           REM Get the current directory and installer path
           set "BUILD_DIR=%CD%\build"
           set "INSTALLER_NAME=${{ steps.package_installer.outputs.INSTALLER_NAME }}"
           set "INSTALLER_PATH=%BUILD_DIR%\%INSTALLER_NAME%"
-          
           echo "Build directory: %BUILD_DIR%"
           echo "Installer name: %INSTALLER_NAME%"
           echo "Full installer path: %INSTALLER_PATH%"
+          
+          REM --- Enhanced Debugging ---
+          echo "Contents of build directory:"
+          dir "%BUILD_DIR%" /B
+          echo "---"
+          REM --- End Enhanced Debugging ---
           
           REM Verify installer exists
           if exist "%INSTALLER_PATH%" (
             echo "✓ Installer found at: %INSTALLER_PATH%"
             echo "INSTALLER_EXISTS=true" >> %GITHUB_OUTPUT%
             echo "INSTALLER_FULL_PATH=%INSTALLER_PATH%" >> %GITHUB_OUTPUT%
-            
+            REM --- Use relative path for action-gh-release compatibility ---
+            echo "INSTALLER_REL_PATH=build\%INSTALLER_NAME%" >> %GITHUB_OUTPUT%
+            REM --- End relative path output ---
             for %%A in ("%INSTALLER_PATH%") do (
               set /a SIZE_MB=%%~zA/1024/1024
               echo "Installer size: %%~zA bytes (!SIZE_MB! MB)"
@@ -202,25 +183,22 @@ jobs:
             )
           ) else (
             echo "✗ ERROR: Installer not found at %INSTALLER_PATH%"
-            echo "Contents of build directory:"
-            dir "%BUILD_DIR%" /B
             echo "INSTALLER_EXISTS=false" >> %GITHUB_OUTPUT%
             exit /b 1
           )
-          
           REM Check if 7z archive was created
           if "${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}" neq "" (
             set "ARCHIVE_NAME=${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}"
             set "ARCHIVE_PATH=%CD%\%ARCHIVE_NAME%"
-            
             echo "Archive name: %ARCHIVE_NAME%"
             echo "Full archive path: %ARCHIVE_PATH%"
-            
             if exist "%ARCHIVE_PATH%" (
               echo "✓ 7z Archive found at: %ARCHIVE_PATH%"
               echo "ARCHIVE_EXISTS=true" >> %GITHUB_OUTPUT%
               echo "ARCHIVE_FULL_PATH=%ARCHIVE_PATH%" >> %GITHUB_OUTPUT%
-              
+              REM --- Use relative path for action-gh-release compatibility ---
+              echo "ARCHIVE_REL_PATH=%ARCHIVE_NAME%" >> %GITHUB_OUTPUT%
+              REM --- End relative path output ---
               for %%A in ("%ARCHIVE_PATH%") do (
                 set /a SIZE_MB=%%~zA/1024/1024
                 echo "Archive size: %%~zA bytes (!SIZE_MB! MB)"
@@ -236,19 +214,44 @@ jobs:
           )
         shell: cmd
 
-      - name: Create GitHub Release
+      - name: Debug Release Paths (Installer)
         if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          echo "Debug: Checking paths for release..."
+          echo "GITHUB_WORKSPACE: %GITHUB_WORKSPACE%"
+          echo "Current Directory: %CD%"
+          echo "INSTALLER_FULL_PATH from prepare_release: ${{ steps.prepare_release.outputs.INSTALLER_FULL_PATH }}"
+          echo "INSTALLER_REL_PATH from prepare_release: ${{ steps.prepare_release.outputs.INSTALLER_REL_PATH }}"
+          echo "Checking existence of full path..."
+          if exist "${{ steps.prepare_release.outputs.INSTALLER_FULL_PATH }}" (
+            echo "✓ Full path exists."
+          ) else (
+            echo "✗ Full path does NOT exist."
+          )
+          echo "Checking existence of relative path (build\...)..."
+          if exist "${{ steps.prepare_release.outputs.INSTALLER_REL_PATH }}" (
+             echo "✓ Relative path (build\...) exists."
+          ) else (
+             echo "✗ Relative path (build\...) does NOT exist."
+          )
+          echo "Contents of current directory:"
+          dir /B
+          echo "Contents of build directory:"
+          dir "build" /B
+        shell: cmd
+
+      - name: Create GitHub Release (Installer)
+        if: startsWith(github.ref, 'refs/tags/') && steps.prepare_release.outputs.INSTALLER_EXISTS == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.prepare_release.outputs.INSTALLER_FULL_PATH }}
+          # Use the relative path calculated in prepare_release for better compatibility
+          files: ${{ steps.prepare_release.outputs.INSTALLER_REL_PATH }}
           tag_name: ${{ github.ref_name }}
           name: Release ${{ github.ref_name }}
           body: |
             Automated release for version ${{ github.ref_name }}.
-            
             ## Download Options
             - **Installer** (`${{ steps.package_installer.outputs.INSTALLER_NAME }}`): Optimized installer (~${{ steps.prepare_release.outputs.INSTALLER_SIZE_MB }}MB)
-            
             ## Size Optimizations Applied
             - ✅ Removed unnecessary Qt modules (Quick, QML, Network, SQL, WebEngine, Multimedia)
             - ✅ Kept only essential platform plugin (qwindows.dll)
@@ -256,26 +259,50 @@ jobs:
             - ✅ Applied LZMA compression to NSIS installer
             - ✅ UPX compression applied to main executable (32.6% size reduction)
             - ℹ️ UPX compression skipped for .NET helper (TempReader.exe) due to compatibility
-            
             ## What's Included
             - **winsys-overlay.exe**: Main application (compressed with UPX)
             - **TempReader.exe**: .NET helper for hardware temperature monitoring
             - **LibreHardwareMonitorLib.dll**: Hardware monitoring library
             - **Qt6 Runtime**: Essential Qt libraries (Core, GUI, Widgets only)
             - **Platform Plugins**: Windows platform support only
-            
             Package size optimized from ~200MB to ~${{ steps.prepare_release.outputs.INSTALLER_SIZE_MB }}MB!
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true # Changed to true to catch issues
+          # draft: true # Uncomment for testing
+
+      - name: Debug Release Paths (7z Archive)
+        if: startsWith(github.ref, 'refs/tags/') && steps.prepare_release.outputs.ARCHIVE_EXISTS == 'true'
+        run: |
+          echo "Debug: Checking paths for 7z archive release..."
+          echo "GITHUB_WORKSPACE: %GITHUB_WORKSPACE%"
+          echo "Current Directory: %CD%"
+          echo "ARCHIVE_FULL_PATH from prepare_release: ${{ steps.prepare_release.outputs.ARCHIVE_FULL_PATH }}"
+          echo "ARCHIVE_REL_PATH from prepare_release: ${{ steps.prepare_release.outputs.ARCHIVE_REL_PATH }}"
+           echo "Checking existence of full path..."
+          if exist "${{ steps.prepare_release.outputs.ARCHIVE_FULL_PATH }}" (
+            echo "✓ Full path exists."
+          ) else (
+            echo "✗ Full path does NOT exist."
+          )
+          echo "Checking existence of relative path..."
+          if exist "${{ steps.prepare_release.outputs.ARCHIVE_REL_PATH }}" (
+             echo "✓ Relative path exists."
+          ) else (
+             echo "✗ Relative path does NOT exist."
+          )
+          echo "Contents of current directory:"
+          dir /B
+        shell: cmd
 
       - name: Upload 7z Archive to Release (if available)
         if: startsWith(github.ref, 'refs/tags/') && steps.prepare_release.outputs.ARCHIVE_EXISTS == 'true'
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.prepare_release.outputs.ARCHIVE_FULL_PATH }}
+          # Use the relative path calculated in prepare_release for better compatibility
+          files: ${{ steps.prepare_release.outputs.ARCHIVE_REL_PATH }}
           tag_name: ${{ github.ref_name }}
           append_body: true
           body: |
-            
             ## Additional Download Option
             - **7-Zip Archive** (`${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}`): Ultra-compressed archive (~${{ steps.prepare_release.outputs.ARCHIVE_SIZE_MB }}MB) - extract and run the installer inside
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true # Changed to true to catch issues
+          # draft: true # Uncomment for testing
