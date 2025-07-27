@@ -96,7 +96,7 @@ jobs:
           )
         shell: cmd
         continue-on-error: true
-      - name: Package with CPack
+            - name: Package with CPack
         id: package_installer
         run: |
           call "%VCVARS_PATH%"
@@ -106,12 +106,15 @@ jobs:
           echo "CPack finished. Searching for installer file..."
           for %%F in (WinSysOverlay-*.exe) do (
             echo "Found installer: %%F"
-            echo "INSTALLER_NAME=%%F" >> %GITHUB_OUTPUT%
+            REM Use the more robust method for setting GITHUB_OUTPUT, similar to other steps
+            echo INSTALLER_NAME=%%F >> %GITHUB_OUTPUT%
             goto :found
           )
           echo "ERROR: CPack installer WinSysOverlay-*.exe not found in build directory!"
           exit /b 1
           :found
+          REM Optional: Add a small delay or verification if issues persist
+          REM timeout /t 1 /nobreak >nul
         shell: cmd
       - name: Display Package Size
         run: |
