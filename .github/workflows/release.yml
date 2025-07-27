@@ -173,59 +173,74 @@ jobs:
           echo "---"
           REM --- End Enhanced Debugging ---
           
-          REM Verify installer exists
-          if exist "%INSTALLER_PATH%" (
-            echo "✓ Installer found at: %INSTALLER_PATH%"
-            REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
-            echo INSTALLER_EXISTS=true >> %GITHUB_OUTPUT%
-            echo INSTALLER_FULL_PATH=%INSTALLER_PATH% >> %GITHUB_OUTPUT%
-            REM --- End FIX ---
-            for %%A in ("%INSTALLER_PATH%") do (
-              set /a SIZE_MB=%%~zA/1024/1024
-              echo "Installer size: %%~zA bytes (!SIZE_MB! MB)"
-              REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
-              echo INSTALLER_SIZE_MB=!SIZE_MB! >> %GITHUB_OUTPUT%
-              REM --- End FIX ---
-            )
-          ) else (
-            echo "✗ ERROR: Installer not found at %INSTALLER_PATH%"
+          REM --- SIMPLIFIED FILE CHECK ---
+          REM First, a basic existence check using 'if exist'
+          if not exist "%INSTALLER_PATH%" (
+            echo "✗ ERROR: Installer not found at %INSTALLER_PATH% (Basic check failed)"
             echo "Contents of build directory:"
             dir "%BUILD_DIR%" /B
-            REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
             echo INSTALLER_EXISTS=false >> %GITHUB_OUTPUT%
-            REM --- End FIX ---
             exit /b 1
           )
+          
+          REM If basic check passes, get size and set outputs
+          echo "✓ Installer found at: %INSTALLER_PATH% (Basic check passed)"
+          
+          REM --- Get file size using for loop ---
+          set "SIZE_MB=0"
+          for %%A in ("%INSTALLER_PATH%") do (
+            set /a "SIZE_BYTES=%%~zA"
+            echo "Installer size (bytes): !SIZE_BYTES!"
+            set /a "SIZE_MB=(!SIZE_BYTES! + 1048575) / 1048576" REM Add 1048575 for rounding up before division
+          )
+          echo "Installer size (MB, rounded): !SIZE_MB!"
+          REM --- End Get file size ---
+          
+          REM Set outputs for success
+          echo INSTALLER_EXISTS=true >> %GITHUB_OUTPUT%
+          echo INSTALLER_FULL_PATH=%INSTALLER_PATH% >> %GITHUB_OUTPUT%
+          REM --- Use relative path for action-gh-release compatibility ---
+          echo INSTALLER_REL_PATH=build\%INSTALLER_NAME% >> %GITHUB_OUTPUT%
+          REM --- End relative path output ---
+          echo INSTALLER_SIZE_MB=!SIZE_MB! >> %GITHUB_OUTPUT%
+          REM --- END SIMPLIFIED FILE CHECK ---
+          
           REM Check if 7z archive was created
           if "${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}" neq "" (
             set "ARCHIVE_NAME=${{ steps.package_7z.outputs.ARCHIVE_7Z_PATH }}"
             set "ARCHIVE_PATH=%CD%\%ARCHIVE_NAME%"
             echo "Archive name: %ARCHIVE_NAME%"
             echo "Full archive path: %ARCHIVE_PATH%"
-            if exist "%ARCHIVE_PATH%" (
-              echo "✓ 7z Archive found at: %ARCHIVE_PATH%"
-              REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
+            
+            REM --- SIMPLIFIED ARCHIVE CHECK ---
+            if not exist "%ARCHIVE_PATH%" (
+              echo "✗ 7z Archive not found at %ARCHIVE_PATH% (Basic check failed)"
+              echo ARCHIVE_EXISTS=false >> %GITHUB_OUTPUT%
+            ) else (
+              echo "✓ 7z Archive found at: %ARCHIVE_PATH% (Basic check passed)"
+              
+              REM --- Get archive size ---
+              set "ARCHIVE_SIZE_MB=0"
+              for %%A in ("%ARCHIVE_PATH%") do (
+                set /a "ARCHIVE_SIZE_BYTES=%%~zA"
+                echo "Archive size (bytes): !ARCHIVE_SIZE_BYTES!"
+                set /a "ARCHIVE_SIZE_MB=(!ARCHIVE_SIZE_BYTES! + 1048575) / 1048576"
+              )
+              echo "Archive size (MB, rounded): !ARCHIVE_SIZE_MB!"
+              REM --- End Get archive size ---
+              
               echo ARCHIVE_EXISTS=true >> %GITHUB_OUTPUT%
               echo ARCHIVE_FULL_PATH=%ARCHIVE_PATH% >> %GITHUB_OUTPUT%
-              REM --- End FIX ---
-              for %%A in ("%ARCHIVE_PATH%") do (
-                set /a SIZE_MB=%%~zA/1024/1024
-                echo "Archive size: %%~zA bytes (!SIZE_MB! MB)"
-                REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
-                echo ARCHIVE_SIZE_MB=!SIZE_MB! >> %GITHUB_OUTPUT%
-                REM --- End FIX ---
-              )
-            ) else (
-              echo "✗ 7z Archive not found at %ARCHIVE_PATH%"
-              REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
-              echo ARCHIVE_EXISTS=false >> %GITHUB_OUTPUT%
-              REM --- End FIX ---
+              REM --- Use relative path for action-gh-release compatibility ---
+              echo ARCHIVE_REL_PATH=%ARCHIVE_NAME% >> %GITHUB_OUTPUT%
+              REM --- End relative path output ---
+              echo ARCHIVE_SIZE_MB=!ARCHIVE_SIZE_MB! >> %GITHUB_OUTPUT%
             )
+            REM --- END SIMPLIFIED ARCHIVE CHECK ---
+            
           ) else (
             echo "ℹ No 7z archive path set"
-            REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
             echo ARCHIVE_EXISTS=false >> %GITHUB_OUTPUT%
-            REM --- End FIX ---
           )
         shell: cmd
 
