@@ -96,7 +96,7 @@ jobs:
           )
         shell: cmd
         continue-on-error: true
-            - name: Package with CPack
+      - name: Package with CPack
         id: package_installer
         run: |
           call "%VCVARS_PATH%"
