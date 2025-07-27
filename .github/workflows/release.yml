@@ -36,7 +36,6 @@ jobs:
         run: |
           call "%VCVARS_PATH%"
           REM Pass the VERSION determined by the previous step to CMake as PROJECT_VERSION
-          REM Ensure PROJECT_VERSION is used here:
           cmake -S . -B build -DCMAKE_PREFIX_PATH="%QT_DIR%" -DCMAKE_BUILD_TYPE=Release -DPROJECT_VERSION="${{ steps.get_version.outputs.VERSION }}"
         shell: cmd
       - name: Build with CMake
