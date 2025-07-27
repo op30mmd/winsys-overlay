@@ -1,5 +1,25 @@
 cmake_minimum_required(VERSION 3.26)
-project(WinSysOverlay LANGUAGES CXX)
+
+# --- START: Version Handling ---
+# Define the project name
+set(PROJECT_NAME "WinSysOverlay")
+
+# Determine Project Version
+# 1. Use PROJECT_VERSION if explicitly provided (e.g., by CMake command line -DPROJECT_VERSION=x.y.z)
+# 2. Default to a development version if not provided
+if(NOT DEFINED PROJECT_VERSION)
+    # Default version if PROJECT_VERSION is not provided
+    set(PROJECT_VERSION "1.0.0-dev")
+endif()
+
+# If the version starts with 'v' (e.g., v1.4.8), strip the 'v'
+# This makes tags like v1.4.8 result in package version 1.4.8
+string(REGEX REPLACE "^v(.*)" "\\1" PROJECT_VERSION_CLEAN "${PROJECT_VERSION}")
+
+# --- END: Version Handling ---
+
+# Use the cleaned version for the project definition
+project(${PROJECT_NAME} VERSION ${PROJECT_VERSION_CLEAN} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -181,50 +201,19 @@ install(CODE "
     endforeach()
     
 " COMPONENT Application)
-set(CPACK_SOURCE_IGNORE_FILES
-    "/build/"
-    "/.git/"
-    "/.github/"
-    "/CMakeFiles/"
-    "CMakeCache.txt"
-    "/*.vcxproj"
-    "/*.sln" 
-    "/Debug/"
-    "/Release/"
-    "/.vs/"
-    "/x64/"
-    "/_CPack_Packages/"
-    "/CPackConfig.cmake"
-    "/CPackSourceConfig.cmake"
-    "/*.dir/"
-)
-
-# Exclude build artifacts from installation
-set(CPACK_IGNORE_FILES
-    "/build/"
-    "/_CPack_Packages/"
-    "/CMakeFiles/"
-    "CMakeCache.txt"
-    "/x64/"
-    "/*.dir/"
-    "/ALL_BUILD.vcxproj"
-    "/ZERO_CHECK.vcxproj"
-    "/PACKAGE.vcxproj"
-    "/INSTALL.vcxproj"
-    "/*.vcxproj.filters"
-    "/*.sln"
-)
 
 # --- CPack Configuration ---
 
+# Use the cleaned project version for CPack
 set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
-set(CPACK_PACKAGE_VERSION "1.0.0")
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION_CLEAN}") # <-- CHANGED FROM "1.0.0"
 set(CPACK_PACKAGE_VENDOR "op30mmd")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A simple system information overlay for Windows.")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")
 set(CPACK_GENERATOR "NSIS")
 
-set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-win64")
+# Ensure the filename reflects the dynamic version
+set(CPACK_PACKAGE_FILE_NAME "${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-win64") # <-- This will now be correct
 set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
 
 # NSIS specific settings
@@ -244,7 +233,27 @@ set(CPACK_NSIS_ENABLE_UNINSTALL_BEFORE_INSTALL ON)
 # Only include the Application component
 set(CPACK_COMPONENTS_ALL Application)
 
-# Don't include any source or build files
+# Exclude build artifacts from installation and source packages
+set(CPACK_IGNORE_FILES
+    "/build/"
+    "/_CPack_Packages/"
+    "/CMakeFiles/"
+    "CMakeCache.txt"
+    "/x64/"
+    "/*.dir/"
+    "/ALL_BUILD.vcxproj"
+    "/ZERO_CHECK.vcxproj"
+    "/PACKAGE.vcxproj"
+    "/INSTALL.vcxproj"
+    "/*.vcxproj.filters"
+    "/*.sln"
+    "/Debug/"
+    "/Release/"
+    "/.vs/"
+    "/.git/"
+    "/.github/"
+)
+
 set(CPACK_SOURCE_IGNORE_FILES
     "/build/"
     "/.git/"
@@ -252,10 +261,21 @@ set(CPACK_SOURCE_IGNORE_FILES
     "/CMakeFiles/"
     "CMakeCache.txt"
     "/*.vcxproj"
-    "/*.sln"
+    "/*.sln" 
     "/Debug/"
     "/Release/"
     "/.vs/"
+    "/x64/"
+    "/_CPack_Packages/"
+    "/CPackConfig.cmake"
+    "/CPackSourceConfig.cmake"
+    "/*.dir/"
+    "/ALL_BUILD.vcxproj"
+    "/ZERO_CHECK.vcxproj"
+    "/PACKAGE.vcxproj"
+    "/INSTALL.vcxproj"
+    "/*.vcxproj.filters"
+    "/*.sln"
 )
 
 include(CPack)
