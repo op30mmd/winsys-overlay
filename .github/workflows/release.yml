@@ -174,19 +174,24 @@ jobs:
           REM Verify installer exists
           if exist "%INSTALLER_PATH%" (
             echo "✓ Installer found at: %INSTALLER_PATH%"
-            echo "INSTALLER_EXISTS=true" >> %GITHUB_OUTPUT%
-            echo "INSTALLER_FULL_PATH=%INSTALLER_PATH%" >> %GITHUB_OUTPUT%
-            REM --- Use relative path for action-gh-release compatibility ---
-            echo "INSTALLER_REL_PATH=build\%INSTALLER_NAME%" >> %GITHUB_OUTPUT%
-            REM --- End relative path output ---
+            REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
+            echo INSTALLER_EXISTS=true >> %GITHUB_OUTPUT%
+            echo INSTALLER_FULL_PATH=%INSTALLER_PATH% >> %GITHUB_OUTPUT%
+            REM --- End FIX ---
             for %%A in ("%INSTALLER_PATH%") do (
               set /a SIZE_MB=%%~zA/1024/1024
               echo "Installer size: %%~zA bytes (!SIZE_MB! MB)"
-              echo "INSTALLER_SIZE_MB=!SIZE_MB!" >> %GITHUB_OUTPUT%
+              REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
+              echo INSTALLER_SIZE_MB=!SIZE_MB! >> %GITHUB_OUTPUT%
+              REM --- End FIX ---
             )
           ) else (
             echo "✗ ERROR: Installer not found at %INSTALLER_PATH%"
-            echo "INSTALLER_EXISTS=false" >> %GITHUB_OUTPUT%
+            echo "Contents of build directory:"
+            dir "%BUILD_DIR%" /B
+            REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
+            echo INSTALLER_EXISTS=false >> %GITHUB_OUTPUT%
+            REM --- End FIX ---
             exit /b 1
           )
           REM Check if 7z archive was created
@@ -197,23 +202,28 @@ jobs:
             echo "Full archive path: %ARCHIVE_PATH%"
             if exist "%ARCHIVE_PATH%" (
               echo "✓ 7z Archive found at: %ARCHIVE_PATH%"
-              echo "ARCHIVE_EXISTS=true" >> %GITHUB_OUTPUT%
-              echo "ARCHIVE_FULL_PATH=%ARCHIVE_PATH%" >> %GITHUB_OUTPUT%
-              REM --- Use relative path for action-gh-release compatibility ---
-              echo "ARCHIVE_REL_PATH=%ARCHIVE_NAME%" >> %GITHUB_OUTPUT%
-              REM --- End relative path output ---
+              REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
+              echo ARCHIVE_EXISTS=true >> %GITHUB_OUTPUT%
+              echo ARCHIVE_FULL_PATH=%ARCHIVE_PATH% >> %GITHUB_OUTPUT%
+              REM --- End FIX ---
               for %%A in ("%ARCHIVE_PATH%") do (
                 set /a SIZE_MB=%%~zA/1024/1024
                 echo "Archive size: %%~zA bytes (!SIZE_MB! MB)"
-                echo "ARCHIVE_SIZE_MB=!SIZE_MB!" >> %GITHUB_OUTPUT%
+                REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
+                echo ARCHIVE_SIZE_MB=!SIZE_MB! >> %GITHUB_OUTPUT%
+                REM --- End FIX ---
               )
             ) else (
               echo "✗ 7z Archive not found at %ARCHIVE_PATH%"
-              echo "ARCHIVE_EXISTS=false" >> %GITHUB_OUTPUT%
+              REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
+              echo ARCHIVE_EXISTS=false >> %GITHUB_OUTPUT%
+              REM --- End FIX ---
             )
           ) else (
             echo "ℹ No 7z archive path set"
-            echo "ARCHIVE_EXISTS=false" >> %GITHUB_OUTPUT%
+            REM --- FIX: Removed quotes around key=value for GITHUB_OUTPUT ---
+            echo ARCHIVE_EXISTS=false >> %GITHUB_OUTPUT%
+            REM --- End FIX ---
           )
         shell: cmd
 
