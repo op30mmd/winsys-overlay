@@ -14,12 +14,21 @@ endif()
 
 # If the version starts with 'v' (e.g., v1.4.8), strip the 'v'
 # This makes tags like v1.4.8 result in package version 1.4.8
-string(REGEX REPLACE "^v(.*)" "\\1" PROJECT_VERSION_CLEAN "${PROJECT_VERSION}")
+string(REGEX REPLACE "^v(.*)" "\\1" PROJECT_VERSION_CPACK "${PROJECT_VERSION}")
+
+# Create a version string suitable for the project() command by removing any suffixes (e.g., -dev)
+# We do this by finding the first hyphen and taking the substring before it.
+string(FIND "${PROJECT_VERSION_CPACK}" "-" SUFFIX_START)
+if(SUFFIX_START GREATER -1)
+    string(SUBSTRING "${PROJECT_VERSION_CPACK}" 0 ${SUFFIX_START} PROJECT_VERSION_CMAKE)
+else()
+    set(PROJECT_VERSION_CMAKE "${PROJECT_VERSION_CPACK}")
+endif()
 
 # --- END: Version Handling ---
 
 # Use the cleaned version for the project definition
-project(${PROJECT_NAME} VERSION ${PROJECT_VERSION_CLEAN} LANGUAGES CXX)
+project(${PROJECT_NAME} VERSION ${PROJECT_VERSION_CMAKE} LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -44,24 +53,24 @@ endif()
 
 # Add a custom target to build the C# TempReader project and copy its dependency
 add_custom_target(TempReader ALL
-    # Build the C# project and output the .exe to our unified bin directory
-    COMMAND dotnet build "${CMAKE_CURRENT_SOURCE_DIR}/TempReader.csproj" -c Release -o "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release"
+    # Publish the C# project and output the .exe to our unified bin directory
+    COMMAND dotnet publish "${CMAKE_CURRENT_SOURCE_DIR}/src/csharp/TempReader.csproj" -c Release -r win-x64 --self-contained false -o "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release"
     # Copy the required LHM DLL to the same directory so the .exe can find it
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${LHM_DLL_PATH}" "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release"
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-    COMMENT "Building C# TempReader helper..."
+    COMMENT "Publishing C# TempReader helper..."
 )
 
 # --- Main Application ---
 
 add_executable(winsys-overlay WIN32
-    main.cpp
-    overlaywidget.h
-    overlaywidget.cpp
-    sysinfomonitor.h
-    sysinfomonitor.cpp
-    settingsdialog.h
-    settingsdialog.cpp
+    src/cpp/main.cpp
+    src/cpp/overlaywidget.h
+    src/cpp/overlaywidget.cpp
+    src/cpp/sysinfomonitor.h
+    src/cpp/sysinfomonitor.cpp
+    src/cpp/settingsdialog.h
+    src/cpp/settingsdialog.cpp
 )
 
 # Ensure TempReader is built before the main application
@@ -204,9 +213,9 @@ install(CODE "
 
 # --- CPack Configuration ---
 
-# Use the cleaned project version for CPack
+# Use the full project version for CPack, which can include suffixes like -dev
 set(CPACK_PACKAGE_NAME "${PROJECT_NAME}")
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION_CLEAN}") # <-- CHANGED FROM "1.0.0"
+set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION_CPACK}")
 set(CPACK_PACKAGE_VENDOR "op30mmd")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "A simple system information overlay for Windows.")
 set(CPACK_PACKAGE_INSTALL_DIRECTORY "${PROJECT_NAME}")

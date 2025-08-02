@@ -68,7 +68,6 @@ private:
     QDate m_lastResetDate;
     
     // Network speed calculation
-    QPair<double, double> m_lastNetworkBytes; // {download, upload}
     qint64 m_lastNetworkTime;
 
 #ifdef Q_OS_WIN

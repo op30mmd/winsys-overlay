@@ -14,7 +14,6 @@ SysInfoMonitor::SysInfoMonitor(QObject *parent) : QObject(parent)
     m_dailyDataBytes = 0;
     m_lastResetDate = QDate::currentDate();
 
-    m_lastNetworkBytes = {0, 0};
     m_lastNetworkTime = QDateTime::currentMSecsSinceEpoch();
 
     connect(m_timer, &QTimer::timeout, this, &SysInfoMonitor::poll);
@@ -235,31 +234,29 @@ void SysInfoMonitor::updateLegacyStats(SysInfo& info) {
             return total;
         };
         
-        double currentDownBytes = getCounterValue(m_networkBytesReceivedCounters);
-        double currentUpBytes = getCounterValue(m_networkBytesSentCounters);
+        double currentDownSpeedBps = getCounterValue(m_networkBytesReceivedCounters);
+        double currentUpSpeedBps = getCounterValue(m_networkBytesSentCounters);
         qint64 currentTime = QDateTime::currentMSecsSinceEpoch();
-        
+
+        // The PDH counter already provides the value in Bytes/sec, so we just convert to MB/s
+        info.networkDownloadSpeed = qMax(0.0, currentDownSpeedBps / (1024.0 * 1024.0));
+        info.networkUploadSpeed = qMax(0.0, currentUpSpeedBps / (1024.0 * 1024.0));
+
         if (m_lastNetworkTime > 0) {
             double timeDiffSec = (currentTime - m_lastNetworkTime) / 1000.0;
             if (timeDiffSec > 0) {
-                double downSpeedBps = (currentDownBytes - m_lastNetworkBytes.first) / timeDiffSec;
-                double upSpeedBps = (currentUpBytes - m_lastNetworkBytes.second) / timeDiffSec;
-                
-                info.networkDownloadSpeed = qMax(0.0, downSpeedBps / (1024.0 * 1024.0));
-                info.networkUploadSpeed = qMax(0.0, upSpeedBps / (1024.0 * 1024.0));
-                
-                m_dailyDataBytes += qMax(0.0, downSpeedBps + upSpeedBps) * timeDiffSec;
+                // Add the data transferred during this interval to the daily total
+                double bytesTransferred = (currentDownSpeedBps + currentUpSpeedBps) * timeDiffSec;
+                m_dailyDataBytes += static_cast<qint64>(bytesTransferred);
             }
         }
-        
-        m_lastNetworkBytes = {currentDownBytes, currentUpBytes};
+
         m_lastNetworkTime = currentTime;
-        
-        info.dailyDataUsageMB = m_dailyDataBytes / (1024.0 * 1024.0);
+        info.dailyDataUsageMB = m_dailyDataBytes / (1024 * 1024);
     } else {
         info.networkDownloadSpeed = 0.0;
         info.networkUploadSpeed = 0.0;
-        info.dailyDataUsageMB = m_dailyDataBytes / (1024.0 * 1024.0);
+        info.dailyDataUsageMB = m_dailyDataBytes / (1024 * 1024);
     }
 
     DWORD processIds[1024];

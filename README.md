@@ -89,32 +89,22 @@ Toggle visibility for each metric:
     cd winsys-overlay
     ```
 
-2.  **Create build directory:**
+2.  **Create and navigate to the build directory:**
     ```bash
     mkdir build
     cd build
     ```
 
-3.  **Configure with CMake:**
+3.  **Configure the project with CMake:**
+    Make sure to point to your Qt installation path.
     ```bash
     # Replace with your actual Qt installation path
-    cmake .. -DCMAKE_PREFIX_PATH=C:\Qt\6.9.1\msvc2022_64
+    cmake .. -DCMAKE_PREFIX_PATH="C:\path\to\Qt\6.x.x\msvcxxxx_64"
     ```
 
-4.  **Build the C# Temperature Reader:**
+4.  **Build the application:**
+    This single command builds both the C++ application and the C# helper, and places all necessary files in the `build/bin/Release` directory.
     ```bash
-    cd ../ # Return to the root directory
-    dotnet publish TempReader.csproj -c Release -r win-x64 --self-contained false
-    ```
-    This will create a `TempReader.exe` in `bin/Release/net6.0/win-x64`.
-
-5.  **Copy Dependencies:**
-    - Copy the compiled `TempReader.exe` to the `build/Release` directory.
-    - Copy `libs/lhm/LibreHardwareMonitorLib.dll` to the `build/Release` directory.
-
-6.  **Build the main application:**
-    ```bash
-    cd build # Return to the build directory
     cmake --build . --config Release
     ```
 
