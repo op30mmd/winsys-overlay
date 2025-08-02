@@ -55,13 +55,15 @@ The `README.md` provides a good overview of the native build process on Windows.
 
 The build process is also automated via the GitHub Actions workflow in `.github/workflows/release.yml`.
 
+*Use* `sudo` *to install packages always*
+
 -----
 
 ## Testing
 
 **Always check for bugs.** Proactively look for potential issues, even if they are not immediately obvious.
 
-### Manual Testing Checklist:
+### Manual Testing Checklist (Check These in the Code, i know you cannot interact with graphical things):
 
   * **UI Functionality:**
       * Can the overlay be dragged and repositioned?
@@ -95,7 +97,8 @@ The build process is also automated via the GitHub Actions workflow in `.github/
 1.  **Analyze the request:** Understand the bug report or feature request.
 2.  **Write the code:** Implement the necessary changes, following the existing code style.
 3.  **Test your changes:** Thoroughly test your changes using the manual testing checklist above.
-4.  **Submit your contribution:** Provide a clear description of the changes you have made.
+4. always create a .gitignore to avoid including local build files and other unnecessary things
+5.  **Submit your contribution:** Provide a clear description of the changes you have made.
 
 -----
 
