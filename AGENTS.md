@@ -97,39 +97,6 @@ Given your limitations, your testing process should focus on:
   * **Performance:**
       * Monitor the application's own CPU and memory usage to ensure it remains lightweight.
       * Test different update intervals and observe their impact on system performance.
-
-### Troubleshooting the Test Environment
-
-You may encounter the following CMake error during configuration if the path to the Qt 6 SDK is not correctly specified:
-
-```
-CMake Error at CMakeLists.txt:35 (find_package):
-  By not providing "FindQt6.cmake" in CMAKE_MODULE_PATH this project has
-  asked CMake to find a package configuration file provided by "Qt6", but
-  CMake did not find one.
-```
-
-This occurs because the `CMakeLists.txt` file may have a hardcoded path to a Qt installation that does not exist on your test machine.
-
-**To resolve this (for testing only):**
-
-1.  **Temporarily Modify `CMakeLists.txt`:** Use your internal editing capabilities to modify the `CMakeLists.txt` file in memory. Comment out or remove the line that sets a hardcoded `CMAKE_PREFIX_PATH`. **Do not use a terminal text editor like `vim` or `nano`.**
-      * **Change this:**
-        ```cmake
-        set(CMAKE_PREFIX_PATH "C:/Qt/6.9.1/msvc2022_64" CACHE PATH "Path to Qt installation")
-        find_package(Qt6 REQUIRED COMPONENTS Widgets)
-        ```
-      * **To this:**
-        ```cmake
-        # The CMAKE_PREFIX_PATH will be passed via the command line instead.
-        find_package(Qt6 REQUIRED COMPONENTS Widgets)
-        ```
-2.  **Run CMake with the Correct Path:** From your `build` directory, execute the `cmake` command and provide the correct path to your Qt installation using the `-DCMAKE_PREFIX_PATH` argument, as instructed in the project's `README.md`.
-    ```bash
-    cmake .. -DCMAKE_PREFIX_PATH="C:\path\to\your\Qt"
-    ```
-3.  **Discard Changes:** After the build is complete, **discard your in-memory changes to `CMakeLists.txt`**. Do not include the modification in any patches or commits to production.
-
 -----
 
 ## Things to Avoid
