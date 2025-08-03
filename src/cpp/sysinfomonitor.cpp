@@ -72,6 +72,7 @@ void SysInfoMonitor::poll() {
 
     if (m_tempReaderProcess->state() == QProcess::Running) {
         m_tempReaderProcess->write("update\n");
+        m_tempReaderProcess->waitForBytesWritten(100);
     } else {
         startTempReaderProcess();
     }
